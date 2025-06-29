@@ -23,3 +23,13 @@ node_modules/
 
 # OS specific
 .DS_Store
+
+# Go binaries
+/mixcloud-updater
+/mixcloud-updater.exe
+/mixcloud-updater-macos
+
+# Configuration files (keep only the example)
+config.toml
+*.toml
+!config.toml.example

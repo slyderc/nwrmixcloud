@@ -1,0 +1,77 @@
+# Mixcloud Updater Configuration
+# Copy this file to 'config.toml' and update the values below
+
+[station]
+# Your radio station name (appears in logs)
+name = "Your Radio Station Name"
+
+# Your Mixcloud username (the part after mixcloud.com/ in your profile URL)
+# Example: If your profile is https://www.mixcloud.com/yourstation/, use "yourstation"
+mixcloud_username = "YOUR_MIXCLOUD_USERNAME"
+
+[oauth]
+# OAuth 2.0 credentials for Mixcloud API access
+# Get these from: https://www.mixcloud.com/developers/create/
+client_id = "YOUR_MIXCLOUD_CLIENT_ID"
+client_secret = "YOUR_MIXCLOUD_CLIENT_SECRET"
+
+# These tokens will be automatically managed by the application
+# Leave empty initially - they will be populated during first OAuth flow
+access_token = ""
+refresh_token = ""
+
+[filtering]
+# Artists to exclude from tracklists (case-insensitive exact matches)
+excluded_artists = [
+    "Station ID",
+    "Commercial",
+    "Sweeper",
+    "Promo",
+    "Ident",
+    "Jingle",
+    "Advertisement",
+    "PSA",
+    "Public Service Announcement"
+]
+
+# Track titles to exclude from tracklists (case-insensitive exact matches)
+excluded_titles = [
+    "Station Identification",
+    "Commercial Break",
+    "News Update",
+    "Weather Report",
+    "Traffic Update",
+    "Time Check",
+    "Legal ID",
+    "Underwriting",
+    "Sponsorship Message"
+]
+
+# Artist patterns to exclude (regular expressions - case-insensitive)
+excluded_artist_patterns = [
+    "(?i)sweeper",
+    "(?i)promo",
+    "(?i)commercial",
+    "(?i)advertisement",
+    "(?i)station.*id",
+    "(?i)legal.*id"
+]
+
+# Title patterns to exclude (regular expressions - case-insensitive)
+excluded_title_patterns = [
+    "(?i)advertisement",
+    "(?i)commercial",
+    "(?i)sponsored.*by",
+    "(?i)brought.*to.*you.*by",
+    "(?i)weather.*brought",
+    "(?i)news.*update",
+    "(?i)traffic.*report"
+]
+
+[paths]
+# Directory where CUE files are stored (optional - can specify file path in command)
+cue_file_directory = "/path/to/your/cue/files"
+
+# Examples for common Myriad setups:
+# Windows: "C:\\Myriad\\Audio\\CUE"
+# Linux/Mac: "/opt/myriad/audio/cue"

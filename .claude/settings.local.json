@@ -16,7 +16,9 @@
       "Bash(rm:*)",
       "mcp__taskmaster-ai__get_task",
       "mcp__taskmaster-ai__update_subtask",
-      "Bash(go test:*)"
+      "Bash(go test:*)",
+      "Bash(./mixcloud-updater --help)",
+      "mcp__taskmaster-ai__update_task"
     ],
     "deny": []
   }
