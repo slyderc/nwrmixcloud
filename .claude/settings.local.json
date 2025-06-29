@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "mcp__taskmaster-ai__get_tasks",
+      "mcp__taskmaster-ai__next_task",
+      "mcp__taskmaster-ai__set_task_status",
+      "Bash(mkdir:*)",
+      "Bash(go mod init:*)",
+      "Bash(go get:*)",
+      "Bash(go mod:*)",
+      "Bash(go build:*)",
+      "Bash(make:*)",
+      "Bash(grep:*)",
+      "Bash(go run:*)",
+      "Bash(rm:*)",
+      "mcp__taskmaster-ai__get_task",
+      "mcp__taskmaster-ai__update_subtask",
+      "Bash(go test:*)"
+    ],
+    "deny": []
+  }
+}

@@ -9,7 +9,7 @@
         "testStrategy": "Verify project structure is created correctly, go.mod is initialized with proper module name, dependencies are installable via 'go mod download', and both cross-compilation targets produce valid executables without errors",
         "priority": "high",
         "dependencies": [],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -17,7 +17,7 @@
             "description": "Set up the base directory structure for the Go project and initialize the Go module with the specified module name",
             "dependencies": [],
             "details": "Create the following directories:\n- cmd/mixcloud-updater/ (for main.go entry point)\n- internal/config/ (configuration management)\n- internal/cue/ (CUE file parsing)\n- internal/mixcloud/ (API integration)\n- internal/filter/ (content filtering)\n- internal/logger/ (logging utilities)\n- bin/ (for compiled binaries)\n\nRun 'go mod init github.com/nowwaveradio/mixcloud-updater' to create go.mod file",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Verify directory structure exists and go.mod contains correct module name"
           },
           {
@@ -28,7 +28,7 @@
               1
             ],
             "details": "Run the following commands:\n- go get github.com/BurntSushi/toml@latest\n- go get golang.org/x/oauth2@latest\n\nEnsure go.mod and go.sum are updated with the correct versions",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Run 'go mod verify' to ensure dependencies are correctly downloaded and verified"
           },
           {
@@ -39,7 +39,7 @@
               1
             ],
             "details": "Create cmd/mixcloud-updater/main.go with:\n- Package main declaration\n- Import statements for future modules\n- Basic main() function with placeholder logic\n- Add comments for future implementation areas\n- Include basic command-line flag parsing setup",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Run 'go build ./cmd/mixcloud-updater' to verify the entry point compiles successfully"
           },
           {
@@ -50,7 +50,7 @@
               3
             ],
             "details": "Create Makefile in project root with:\n- build-windows target: GOOS=windows GOARCH=amd64 go build -o bin/mixcloud-updater.exe ./cmd/mixcloud-updater\n- build-macos target: GOOS=darwin GOARCH=amd64 go build -o bin/mixcloud-updater-macos ./cmd/mixcloud-updater\n- build-all target that runs both\n- clean target to remove bin/ directory\n- Add .PHONY declarations for all targets",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Run 'make build-windows' and 'make build-macos' to verify both targets produce binaries in bin/ directory"
           },
           {
@@ -61,7 +61,7 @@
               1
             ],
             "details": "Create the following files with basic package declarations and doc comments:\n- internal/config/config.go (package config)\n- internal/cue/parser.go (package cue)\n- internal/mixcloud/client.go (package mixcloud)\n- internal/filter/filter.go (package filter)\n- internal/logger/logger.go (package logger)\n\nEach file should contain package declaration, package documentation comment, and a TODO comment for future implementation",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Run 'go build ./...' from project root to ensure all packages are valid and compile"
           }
         ]
@@ -76,7 +76,7 @@
         "dependencies": [
           1
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -84,7 +84,7 @@
             "description": "Create the config package structure and define all necessary types including Config struct with nested Station, OAuth, Filtering, and Paths structs",
             "dependencies": [],
             "details": "Create internal/config/config.go file. Define the Config struct with proper TOML tags for all fields. Ensure struct fields match the expected TOML structure exactly. Include any additional types needed for configuration management.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Write unit tests to verify struct marshaling/unmarshaling with sample TOML data"
           },
           {
@@ -95,7 +95,7 @@
               1
             ],
             "details": "Create LoadConfig(filepath string) (*Config, error) function. Use os.ReadFile to read the config file, then toml.Unmarshal to parse into Config struct. Handle file read errors and parsing errors appropriately. Return populated Config struct on success.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Create test fixtures with valid and invalid TOML files. Test parsing success cases and error handling for malformed TOML"
           },
           {
@@ -106,7 +106,7 @@
               2
             ],
             "details": "Create a Validate() method on Config struct. Check that Station.Name, Station.MixcloudUsername, OAuth.ClientID, and OAuth.ClientSecret are not empty. Validate that Paths.CueFileDirectory exists as a directory. Return descriptive errors for each validation failure.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test validation with configs missing required fields, empty values, and invalid directory paths"
           },
           {
@@ -117,7 +117,7 @@
               3
             ],
             "details": "Create DefaultConfig() function that returns a Config with sensible defaults (e.g., empty slices for filtering arrays, current directory for paths). Modify LoadConfig to merge loaded values with defaults, preserving any explicitly set values from the TOML file.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test that defaults are applied when fields are missing, and that explicit values override defaults"
           },
           {
@@ -128,7 +128,7 @@
               4
             ],
             "details": "Create ApplyEnvironmentOverrides() method that checks for environment variables like NWRMIXCLOUD_OAUTH_ACCESS_TOKEN, NWRMIXCLOUD_OAUTH_REFRESH_TOKEN, etc. Override corresponding config values if env vars are set. Call this after loading from TOML but before validation.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test with various environment variable combinations, ensuring they properly override TOML values"
           }
         ]
@@ -143,7 +143,7 @@
         "dependencies": [
           1
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -151,7 +151,7 @@
             "description": "Set up the cue package directory structure and define the Track and CueSheet structs with proper field types and tags",
             "dependencies": [],
             "details": "Create internal/cue/ directory. Define Track struct with Index (int), StartTime (string for MM:SS format), Artist, Title, and Genre fields. Define CueSheet struct with Title, Date, and Tracks slice. Add JSON tags for serialization. Include helper methods like (t Track) String() for debugging.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Create unit tests to verify struct initialization and basic field access patterns"
           },
           {
@@ -162,7 +162,7 @@
               1
             ],
             "details": "Implement a lineParser that reads the CUE file using bufio.Scanner, strips BOM if present, handles Windows/Unix line endings, and identifies command types (REM, FILE, TRACK, PERFORMER, TITLE, INDEX). Create a parseLine function that returns command type and parameters. Handle line continuations for multi-line quoted strings.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test with sample CUE files containing various line endings, quoted strings with spaces, and edge cases like empty lines or comments"
           },
           {
@@ -173,7 +173,7 @@
               2
             ],
             "details": "Create parseTrack function that maintains state for current track being parsed. Handle TRACK command to initialize new Track with index. Parse PERFORMER and TITLE commands, supporting both track-level and album-level (before first TRACK). Parse INDEX 01 commands and convert frame-based time (MM:SS:FF) to MM:SS format by dropping frames. Handle quoted strings properly.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test parsing of individual tracks with various metadata combinations, verify correct time format conversion, test quote handling"
           },
           {
@@ -184,7 +184,7 @@
               3
             ],
             "details": "Parse REM GENRE commands and store in appropriate track or album level. Handle FILE commands for both single-file and multi-file CUE formats, storing file references. Parse global PERFORMER and TITLE that appear before first TRACK command. Support REM DATE and other common REM fields. Maintain parsing context to differentiate between album and track level commands.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test with CUE files containing various REM commands, multiple FILE entries, and mixed album/track metadata"
           },
           {
@@ -195,7 +195,7 @@
               4
             ],
             "details": "Create ParseCueFile(filename string) (*CueSheet, error) that opens the file, initializes the parser, and coordinates the parsing process. Add validation for required fields, handle malformed commands gracefully, and provide descriptive error messages with line numbers. Support both absolute and relative file paths. Clean up any partial results on error. Add logging for debugging.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test with valid and invalid CUE files, verify error messages are helpful, test file not found scenarios, verify memory cleanup on errors"
           }
         ]
@@ -211,7 +211,7 @@
           2,
           3
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -219,7 +219,7 @@
             "description": "Create the filter package directory structure and define the Filter struct with all necessary fields for string and regex-based filtering",
             "dependencies": [],
             "details": "Create internal/filter/filter.go and define the Filter struct with fields for excludedArtists, excludedTitles, excludedArtistRegex, and excludedTitleRegex. Import necessary packages including regexp and the config package. Define the interface methods that will be implemented.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Create filter_test.go with test fixtures for various filter configurations"
           },
           {
@@ -230,7 +230,7 @@
               1
             ],
             "details": "Implement NewFilter(config *config.Config) (*Filter, error) that reads excluded artists/titles from config, converts string patterns to lowercase for case-insensitive matching, compiles regex patterns from config with error handling for invalid patterns, and returns initialized Filter instance or error if regex compilation fails.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test with valid and invalid regex patterns, empty configurations, and various config combinations"
           },
           {
@@ -241,7 +241,7 @@
               2
             ],
             "details": "Implement private helper methods like isExcludedByString(artist, title string) bool that converts input to lowercase and checks against pre-lowercased excluded lists. Use strings.Contains or exact matching based on requirements. Ensure efficient lookup for large exclusion lists.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Unit tests with various case combinations, partial matches, and edge cases like empty strings"
           },
           {
@@ -252,7 +252,7 @@
               2
             ],
             "details": "Implement private helper methods like isExcludedByRegex(artist, title string) bool that iterates through compiled regex patterns and checks for matches. Handle nil regex slices gracefully. Consider performance implications of multiple regex checks.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test with complex regex patterns, special characters, and performance benchmarks for multiple patterns"
           },
           {
@@ -264,7 +264,7 @@
               4
             ],
             "details": "Implement ShouldIncludeTrack(track *cue.Track) bool that calls string and regex filtering helpers, returns false if any filter matches (track should be excluded), logs filtered tracks at INFO level with reason (which filter matched), and handles nil track gracefully. Ensure the method is efficient as it will be called for every track.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Integration tests with real track data, verify logging output, test filter precedence and combination logic"
           }
         ]
@@ -279,15 +279,15 @@
         "dependencies": [
           2
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
             "title": "Create Mixcloud Client Structure and Configuration",
             "description": "Set up the basic Client struct and configuration loading for OAuth 2.0 authentication",
             "dependencies": [],
-            "details": "Create internal/mixcloud/client.go with Client struct containing httpClient, oauth2.Config, token, and username fields. Implement NewClient constructor that initializes oauth2.Config from the provided config.Config, setting up proper ClientID, ClientSecret, and OAuth endpoints (AuthURL: https://www.mixcloud.com/oauth/authorize, TokenURL: https://www.mixcloud.com/oauth/access_token)",
-            "status": "pending",
+            "details": "Create internal/mixcloud/client.go with Client struct containing httpClient, oauth2.Config, token, and username fields. Implement NewClient constructor that initializes oauth2.Config from the provided config.Config, setting up proper ClientID, ClientSecret, and OAuth endpoints (AuthURL: https://www.mixcloud.com/oauth/authorize, TokenURL: https://www.mixcloud.com/oauth/access_token)\n<info added on 2025-06-29T20:07:25.557Z>\nSuccessfully completed the Client struct and NewClient constructor implementation. The Client struct includes all required fields (httpClient, config, token, username) with proper types. NewClient validates all config parameters before initialization, ensuring ClientID, ClientSecret, and MixcloudUsername are present. OAuth2 configuration correctly uses Mixcloud's endpoints. Added automatic token creation from stored credentials when available in config. Included Show struct with appropriate JSON tags for parsing API responses. Package compiles without errors and is ready for token storage/retrieval implementation.\n</info added on 2025-06-29T20:07:25.557Z>",
+            "status": "done",
             "testStrategy": "Unit test NewClient to verify proper initialization of oauth2.Config with mock config values"
           },
           {
@@ -297,8 +297,8 @@
             "dependencies": [
               1
             ],
-            "details": "Create methods LoadToken() and SaveToken() on the Client struct. LoadToken should read the stored access token and refresh token from config.Config. SaveToken should update the config file with new token values using the config package's update functionality. Handle file I/O errors and ensure thread-safe operations",
-            "status": "pending",
+            "details": "Create methods LoadToken() and SaveToken() on the Client struct. LoadToken should read the stored access token and refresh token from config.Config. SaveToken should update the config file with new token values using the config package's update functionality. Handle file I/O errors and ensure thread-safe operations\n<info added on 2025-06-29T20:09:11.552Z>\nSuccessfully implemented LoadToken() and SaveToken() methods for persistent token management.\n\nKey implementation details:\n- Modified Client struct to include *config.Config and configPath fields for direct config access\n- Updated NewClient() signature to require configPath parameter, enabling token persistence\n- LoadToken() returns the stored OAuth token from the config\n- SaveToken() performs atomic updates to both in-memory config and persistent storage:\n  * Updates client's config reference and token field\n  * Calls new SaveConfig() function to marshal and write TOML file\n  * Gracefully handles file I/O errors with logging\n  * Validates parameters before processing\n- Added SaveConfig() function to config package for TOML serialization and file writing\n- All code compiles successfully and is ready for integration with OAuth2 TokenSource\n\nThe implementation provides thread-safe token updates and robust error handling for file operations, ensuring reliable token persistence across application restarts.\n</info added on 2025-06-29T20:09:11.552Z>",
+            "status": "done",
             "testStrategy": "Mock file operations to test token save/load functionality with various token states"
           },
           {
@@ -308,8 +308,8 @@
             "dependencies": [
               2
             ],
-            "details": "In NewClient, create a TokenSource using oauth2Config.TokenSource() with the loaded token. Wrap the http.Client with oauth2.NewClient() to enable automatic token refresh. The TokenSource will automatically refresh expired tokens using the refresh token when making API calls",
-            "status": "pending",
+            "details": "In NewClient, create a TokenSource using oauth2Config.TokenSource() with the loaded token. Wrap the http.Client with oauth2.NewClient() to enable automatic token refresh. The TokenSource will automatically refresh expired tokens using the refresh token when making API calls\n<info added on 2025-06-29T20:10:22.182Z>\nSuccessfully implemented OAuth2 TokenSource for automatic token refresh.\n\nImplementation details:\n- Modified NewClient() to create TokenSource using oauth2Config.TokenSource() with the loaded token\n- Wrapped HTTP client with oauth2.NewClient() to enable automatic token refresh\n- Added conditional logic to handle cases with/without tokens:\n  * With token: Creates OAuth-enabled HTTP client with TokenSource\n  * Without token: Creates basic HTTP client (API calls will fail until token set)\n- Updated SaveToken() method to recreate OAuth HTTP client when token is updated\n- Added GetHTTPClient() method to provide access to the configured HTTP client\n- Used oauth2.NoContext for OAuth operations as recommended for server applications\n\nThe TokenSource automatically handles token expiry and refresh using the refresh token when making API calls. The implementation ensures that both initial token setup and token updates maintain the OAuth transport functionality. Package builds successfully without errors.\n</info added on 2025-06-29T20:10:22.182Z>",
+            "status": "done",
             "testStrategy": "Test with expired tokens to verify automatic refresh behavior, mock OAuth token endpoint responses"
           },
           {
@@ -319,8 +319,8 @@
             "dependencies": [
               3
             ],
-            "details": "Create a custom RoundTripper that wraps the OAuth2 transport to intercept token refresh events. When a new token is obtained, call SaveToken() to persist it to the config file. Add structured logging using the project's logger to record refresh events, including timestamps and success/failure status",
-            "status": "pending",
+            "details": "Create a custom RoundTripper that wraps the OAuth2 transport to intercept token refresh events. When a new token is obtained, call SaveToken() to persist it to the config file. Add structured logging using the project's logger to record refresh events, including timestamps and success/failure status\n<info added on 2025-06-29T20:12:26.206Z>\nSuccessfully implemented token refresh event handling with custom RoundTripper.\n\nImplementation details:\n- Created tokenRefreshTransport struct that implements http.RoundTripper interface\n- Added tokenSource field to Client struct for monitoring token changes\n- Modified NewClient() to wrap OAuth2 transport with custom transport for token refresh monitoring\n- Updated SaveToken() method to properly recreate custom transport when token is updated\n- Added saveTokenToFile() private method to persist tokens without recreating HTTP client (prevents recursion)\n- Implemented comprehensive logging for token refresh events:\n  * Logs when token refresh is detected\n  * Logs success/failure of token persistence\n  * Logs warnings for token access errors\n- The RoundTripper compares access tokens before/after each request to detect refreshes\n- When refresh detected, automatically persists new token to config file\n- Uses structured logging with [MIXCLOUD] prefix for easy identification\n\nThe implementation ensures that refreshed tokens are automatically persisted without manual intervention, providing seamless token management. All code builds successfully without errors.\n</info added on 2025-06-29T20:12:26.206Z>",
+            "status": "done",
             "testStrategy": "Test RoundTripper with mock transport to verify token persistence after refresh"
           },
           {
@@ -330,8 +330,8 @@
             "dependencies": [
               4
             ],
-            "details": "Add error handling for: invalid refresh tokens (return specific error type), network failures during refresh (implement retry with backoff), config file write failures (log but continue with in-memory token). Create custom error types for different OAuth failure scenarios. Ensure the client can operate with degraded functionality if token refresh fails",
-            "status": "pending",
+            "details": "Add error handling for: invalid refresh tokens (return specific error type), network failures during refresh (implement retry with backoff), config file write failures (log but continue with in-memory token). Create custom error types for different OAuth failure scenarios. Ensure the client can operate with degraded functionality if token refresh fails\n<info added on 2025-06-29T20:15:26.908Z>\nSuccessfully implemented comprehensive error handling and graceful degradation for OAuth failures and token refresh issues.\n\nImplementation details:\n- Created custom error types:\n  * OAuthError struct with Type, Message, Cause, and Retryable fields\n  * Pre-defined error variables for common scenarios (ErrInvalidRefreshToken, ErrNetworkFailure, etc.)\n  * Error wrapping and unwrapping support for better error context\n- Enhanced error handling throughout the codebase:\n  * Updated saveTokenToFile() and SaveToken() methods to use custom error types\n  * Added graceful degradation when HTTP client recreation fails\n  * Improved config file write failure handling (logs warning but continues)\n- Implemented retry logic with exponential backoff:\n  * executeWithRetry() method with 3 retry attempts and exponential backoff starting at 1 second\n  * Automatic retry for network failures and HTTP 429 (rate limited) responses\n  * shouldRetryError() function to classify transient vs permanent errors\n- Added error classification system:\n  * classifyError() method converts generic errors to specific OAuth errors\n  * Pattern matching for common OAuth error scenarios (invalid_grant, unauthorized, etc.)\n  * Network error detection for retry eligibility\n- Created health checking and status reporting:\n  * IsHealthy() method to check client operational status\n  * GetAuthenticationStatus() method providing detailed client state information\n  * Helps callers determine if client can make authenticated requests\n- Added graceful degradation features:\n  * Client continues with basic HTTP client when OAuth setup fails\n  * Comprehensive logging for all error scenarios and degraded states\n  * Retryable error classification to guide recovery strategies\n\nThe implementation ensures robust error handling while maintaining functionality even when some components fail. All code builds successfully without errors.\n</info added on 2025-06-29T20:15:26.908Z>",
+            "status": "done",
             "testStrategy": "Test various failure scenarios: invalid refresh token, network errors, file system errors"
           }
         ]
@@ -346,15 +346,15 @@
         "dependencies": [
           5
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
             "title": "Create Base URL Generation Function",
             "description": "Implement the core GenerateShowURL function with basic string transformations for converting show names to URL-safe slugs",
             "dependencies": [],
-            "details": "Create the GenerateShowURL function in the mixcloud package that accepts username and showName parameters. Implement basic transformations: convert to lowercase, create a string replacer for common patterns (spaces to hyphens, removing slashes, dots, commas, quotes), and format the final URL with the Mixcloud domain pattern",
-            "status": "pending",
+            "details": "Create the GenerateShowURL function in the mixcloud package that accepts username and showName parameters. Implement basic transformations: convert to lowercase, create a string replacer for common patterns (spaces to hyphens, removing slashes, dots, commas, quotes), and format the final URL with the Mixcloud domain pattern\n<info added on 2025-06-29T21:33:44.564Z>\nSuccessfully implemented the core GenerateShowURL function with basic string transformations.\n\nImplementation details:\n- Created GenerateShowURL function that accepts username and showName parameters\n- Added input validation to return empty string for empty parameters\n- Implemented basic transformations:\n  * Convert to lowercase for URL compatibility\n  * Use strings.NewReplacer for pattern replacement with proper ordering\n  * Replace \" - \" and \" & \" with single hyphens\n  * Remove special characters: /, ., , ', \"\n  * Replace remaining spaces with hyphens\n- Added regex-based duplicate hyphen removal using regexp.MustCompile(`-+`)\n- Implemented hyphen trimming from start and end using strings.Trim\n- Generate full Mixcloud URL with proper format: https://www.mixcloud.com/username/slug/\n- Added comprehensive comments explaining pattern replacement order and rationale\n\nThe function handles basic show name transformations and builds successfully. Ready for advanced character replacement logic in the next subtask.\n</info added on 2025-06-29T21:33:44.564Z>",
+            "status": "done",
             "testStrategy": "Unit tests with basic show names like 'Test Show', 'Show - With - Hyphens', and 'Show 1/2/2025' to verify correct slug generation"
           },
           {
@@ -365,7 +365,7 @@
               1
             ],
             "details": "Extend the strings.NewReplacer to handle more complex patterns: ' - ' to '-', ' & ' to '-', and any remaining spaces to hyphens. Ensure the order of replacements prevents edge cases where patterns might overlap. Add handling for parentheses, brackets, and other common punctuation marks used in show titles",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test with complex DJ names like 'DJ Name & Partner', 'Show (Live)', 'Artist [Special Guest]' to ensure all special characters are properly handled"
           },
           {
@@ -376,7 +376,7 @@
               2
             ],
             "details": "Use regexp.MustCompile to create a pattern that matches multiple consecutive hyphens and replace them with a single hyphen. Apply strings.Trim to remove any hyphens from the start or end of the slug. Consider compiling the regex once as a package variable for performance",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test with edge cases like 'Show - - Name', '- Leading Hyphen', 'Trailing Hyphen -' to verify proper deduplication and trimming"
           },
           {
@@ -387,7 +387,7 @@
               3
             ],
             "details": "Before the main replacer, use regex patterns to detect and normalize date formats like M/D/YYYY, MM/DD/YYYY, M-D-YYYY, or written dates. Convert all date separators to a consistent format (removing slashes, dots, or hyphens between date components). Consider patterns like '(\\d{1,2})[/.-](\\d{1,2})[/.-](\\d{4})' for flexible date matching",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test with various date formats: '6/26/2025', '06/26/2025', '6-26-2025', '6.26.2025' to ensure consistent slug generation like '6262025'"
           },
           {
@@ -398,7 +398,7 @@
               4
             ],
             "details": "Use golang.org/x/text/unicode/norm for Unicode normalization. Implement logic to either transliterate accented characters to their ASCII equivalents (é→e, ñ→n) or remove them entirely. Consider using the golang.org/x/text/transform package for more sophisticated character handling. Add a fallback for completely non-Latin text that might need special handling",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test with Unicode show names like 'Café Music Show', 'Señor DJ', '音楽 Show', and mixed scripts to ensure proper handling or graceful degradation"
           }
         ]
@@ -414,7 +414,7 @@
           5,
           6
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -422,7 +422,7 @@
             "description": "Create the foundational data structures for the Mixcloud API integration including the Show struct, error types, and client configuration with authentication and timeout settings",
             "dependencies": [],
             "details": "Define the Show struct with JSON tags for API response parsing. Create custom error types for rate limiting, invalid URLs, and API failures. Set up the Client struct with HTTP client configuration including 30-second timeout, authentication headers, and base URL. Define constants for API endpoints (/cloudcast/, /upload/) and rate limit retry parameters.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Unit tests to verify struct marshaling/unmarshaling, error type implementations, and client initialization with proper configuration"
           },
           {
@@ -431,7 +431,7 @@
             "description": "Create utility functions to parse Mixcloud show URLs and extract the cloudcast key needed for API requests",
             "dependencies": [],
             "details": "Implement a function to parse URLs like 'https://www.mixcloud.com/username/show-name/' and extract the cloudcast key format 'username/show-name/'. Handle various URL formats including with/without www, http/https, and trailing slashes. Validate the URL structure and return appropriate errors for invalid formats.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Table-driven tests with various valid and invalid URL formats to ensure correct key extraction and error handling"
           },
           {
@@ -443,7 +443,7 @@
               2
             ],
             "details": "Use the URL parser to extract the cloudcast key, construct the API endpoint URL, make a GET request with proper authentication headers, handle various HTTP status codes (200, 404, 401, 500), parse the JSON response into the Show struct, and implement proper error wrapping for debugging. Handle network timeouts and connection errors gracefully.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Integration tests with mock HTTP server to test various response scenarios, unit tests for JSON parsing logic"
           },
           {
@@ -455,7 +455,7 @@
               2
             ],
             "details": "Extract cloudcast key from URL, validate description length (1000 char limit), create multipart form data with the cloudcast key and new description fields, make POST request to /upload/ endpoint with proper content-type header, handle successful responses and API-specific error codes. Implement request retry logic for transient failures.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Integration tests with mock server for multipart form validation, unit tests for description validation and form data construction"
           },
           {
@@ -467,7 +467,7 @@
               4
             ],
             "details": "Detect 429 status codes and Retry-After headers, implement exponential backoff starting at 1 second with a maximum of 5 retries, respect Retry-After header if provided, add jitter to prevent thundering herd, log retry attempts for debugging, return appropriate errors after max retries exceeded. Ensure both GetShow and UpdateShowDescription methods use this retry logic.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Unit tests with mock time and HTTP responses to verify backoff calculations and retry behavior, integration tests to ensure methods handle rate limiting correctly"
           }
         ]
@@ -483,7 +483,7 @@
           3,
           4
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
@@ -491,7 +491,7 @@
             "description": "Create the base package structure for the formatter module with proper interfaces and type definitions",
             "dependencies": [],
             "details": "Create internal/formatter/formatter.go with Formatter struct definition including maxLength field set to 1000 for Mixcloud's limit. Define FormatterInterface with FormatTracklist method signature. Create package documentation explaining the formatter's purpose and usage.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Create formatter_test.go with basic instantiation tests to verify struct creation and default values"
           },
           {
@@ -502,7 +502,7 @@
               1
             ],
             "details": "Implement the FormatTracklist method that accepts []cue.Track and *filter.Filter parameters. Loop through tracks array and use filter.ShouldIncludeTrack() to determine inclusion. Store filtered tracks in a temporary slice for formatting.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test with mock filter that includes/excludes specific tracks based on criteria. Verify only filtered tracks are processed."
           },
           {
@@ -513,7 +513,7 @@
               2
             ],
             "details": "For each filtered track, format as 'MM:SS - \"Track Title\" by Artist Name' using fmt.Sprintf. Handle edge cases like missing artist names or special characters in titles. Ensure proper quote escaping for track titles. Build lines slice with formatted strings.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test various track inputs including edge cases: empty titles, missing artists, special characters, long names"
           },
           {
@@ -524,7 +524,7 @@
               3
             ],
             "details": "Create truncateSmartly(tracklist string) string method that: splits tracklist by newlines, iteratively adds lines while tracking total length, stops before exceeding maxLength, ensures last line is complete (no partial lines), appends '... and more' if truncated. Handle edge case where even first track exceeds limit.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test with tracklists of various lengths: under limit, exactly at limit, slightly over, significantly over. Verify truncation preserves complete lines and adds ellipsis appropriately."
           },
           {
@@ -535,7 +535,7 @@
               4
             ],
             "details": "Write integration tests combining all components: various track counts, different filter configurations, boundary testing for character limits. Add error handling for nil inputs. Optimize performance for large track lists. Add logging for debugging truncation decisions.",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Create test cases with real-world scenarios: 50+ track mixes, various artist/title lengths, different filter combinations. Benchmark performance with large datasets."
           }
         ]
@@ -681,7 +681,7 @@
     ],
     "metadata": {
       "created": "2025-06-29T19:16:03.127Z",
-      "updated": "2025-06-29T19:16:03.127Z",
+      "updated": "2025-06-29T21:58:44.478Z",
       "description": "Tasks for master context"
     }
   }
