@@ -65,6 +65,20 @@ cue_file_directory = "/path/to/your/cue/files"
 auto_process = false  # Process all enabled shows automatically
 batch_size = 5       # Number of shows to process concurrently
 
+[logging]
+# Cross-platform file logging configuration
+# Logs are essential for auditing when Myriad launches the program
+enabled = true                    # Enable file logging
+directory = "logs"                # Log directory (relative to working dir or absolute path)
+                                 # Windows default: %APPDATA%\NowWaveRadio\MixcloudUpdater\logs
+                                 # macOS default: ~/.nowwaveradio/mixcloud-updater/logs
+filename_pattern = "mixcloud-updater-%Y%m%d.log"  # Daily rotation pattern
+                                                  # %Y=year, %m=month, %d=day, %H=hour, %M=minute
+level = "info"                   # Log level: debug, info, warn, error
+max_files = 30                   # Keep 30 days of logs (0 = no limit)
+max_size_mb = 10                 # Rotate when file exceeds 10MB (0 = no size limit)
+console_output = true            # Also output to console (helpful for debugging)
+
 [templates]
 # Default template name when no show-specific template is specified
 default = "classic"

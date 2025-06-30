@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"math/rand"
 	"mime/multipart"
 	"net/http"
@@ -26,6 +27,7 @@ import (
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/nowwaveradio/mixcloud-updater/internal/config"
+	"github.com/nowwaveradio/mixcloud-updater/internal/logger"
 )
 
 // AIDEV-NOTE: Compile regex patterns and transformers once at package level for better performance
@@ -882,23 +884,38 @@ func (c *Client) parseRetryAfterHeader(retryAfter string) int {
 // GetShow fetches show information from the Mixcloud API
 // AIDEV-NOTE: Implements GET /cloudcast/<key>/ endpoint with proper error handling
 func (c *Client) GetShow(showURL string) (*Show, error) {
+	log := logger.Get()
+	startTime := time.Now()
+	
+	log.Info("Starting Mixcloud API GetShow request", 
+		slog.String("show_url", showURL))
+
 	// Extract cloudcast key from the URL
 	cloudcastKey, err := extractCloudcastKey(showURL)
 	if err != nil {
+		log.Error("Failed to extract cloudcast key from URL", 
+			slog.String("show_url", showURL),
+			slog.String("error", err.Error()))
 		return nil, fmt.Errorf("failed to parse show URL: %w", err)
 	}
 
-	// AIDEV-NOTE: GetShow works for public shows without authentication
-	// We'll attempt an unauthenticated call first, then fall back to authenticated if needed
-	log.Printf("[MIXCLOUD] Attempting to fetch public show data")
+	log.Debug("Extracted cloudcast key", 
+		slog.String("cloudcast_key", cloudcastKey))
 
 	// Construct the API endpoint URL
 	endpoint := fmt.Sprintf(CloudcastEndpoint, cloudcastKey)
 	apiURL := MixcloudAPIBaseURL + endpoint
 
+	log.Info("Making Mixcloud API request", 
+		slog.String("api_url", apiURL),
+		slog.String("method", "GET"),
+		slog.Bool("authenticated", false))
+
 	// Create HTTP request with timeout
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
+		log.Error("Failed to create HTTP request", 
+			slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%w: failed to create request", ErrAPIRequestFailed)
 	}
 
@@ -907,53 +924,89 @@ func (c *Client) GetShow(showURL string) (*Show, error) {
 	req.Header.Set("User-Agent", "mixcloud-updater/1.0")
 
 	// Make the API request - try unauthenticated first for public shows
-	// AIDEV-NOTE: Public shows don't require authentication, so try basic HTTP client first
-	log.Printf("[MIXCLOUD] Making API request to: %s", apiURL)
 	basicClient := &http.Client{}
 	resp, err := basicClient.Do(req)
 	if err != nil {
+		log.Error("Mixcloud API request failed", 
+			slog.String("api_url", apiURL),
+			slog.String("error", err.Error()),
+			slog.Duration("duration", time.Since(startTime)))
 		return nil, fmt.Errorf("%w: HTTP request failed: %v", ErrNetworkFailure, err)
 	}
 	defer resp.Body.Close()
 
+	log.Info("Mixcloud API response received", 
+		slog.String("api_url", apiURL),
+		slog.Int("status_code", resp.StatusCode),
+		slog.Duration("duration", time.Since(startTime)))
+
 	// Handle different HTTP status codes
 	switch resp.StatusCode {
 	case http.StatusOK:
-		// Success - continue with parsing
+		log.Debug("API request successful")
 	case http.StatusNotFound:
+		log.Error("Show not found on Mixcloud", 
+			slog.String("show_url", showURL),
+			slog.Int("status_code", resp.StatusCode))
 		return nil, fmt.Errorf("%w: show URL %s", ErrShowNotFound, showURL)
 	case http.StatusUnauthorized:
+		log.Error("API authentication failed", 
+			slog.Int("status_code", resp.StatusCode))
 		return nil, fmt.Errorf("%w: API authentication failed", ErrAuthenticationFailed)
 	case http.StatusTooManyRequests:
-		// This should be rare since executeAPIRequestWithRetry handles rate limiting
+		log.Error("API rate limit exceeded", 
+			slog.Int("status_code", resp.StatusCode))
 		return nil, fmt.Errorf("%w: API rate limit exceeded after retries", ErrRateLimited)
 	case http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable:
+		log.Error("Mixcloud server error", 
+			slog.Int("status_code", resp.StatusCode))
 		return nil, fmt.Errorf("%w: server error (status %d)", ErrAPIRequestFailed, resp.StatusCode)
 	default:
+		log.Error("Unexpected API response status", 
+			slog.Int("status_code", resp.StatusCode))
 		return nil, fmt.Errorf("%w: unexpected status code %d", ErrAPIRequestFailed, resp.StatusCode)
 	}
 
 	// Read the response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		log.Error("Failed to read API response body", 
+			slog.String("error", err.Error()))
 		return nil, fmt.Errorf("%w: failed to read response body: %v", ErrAPIRequestFailed, err)
 	}
+
+	log.Debug("API response body read", 
+		slog.Int("body_size", len(body)))
 
 	// Parse JSON response into Show struct
 	var show Show
 	if err := json.Unmarshal(body, &show); err != nil {
+		previewLen := len(body)
+		if previewLen > 200 {
+			previewLen = 200
+		}
+		log.Error("Failed to parse API response JSON", 
+			slog.String("error", err.Error()),
+			slog.String("response_preview", string(body[:previewLen])))
 		return nil, fmt.Errorf("%w: failed to parse JSON response: %v", ErrAPIRequestFailed, err)
 	}
 
 	// Validate that we got the expected data
 	if show.Key == "" || show.Name == "" {
+		log.Error("Incomplete show data received from API", 
+			slog.String("show_key", show.Key),
+			slog.String("show_name", show.Name))
 		return nil, fmt.Errorf("%w: incomplete show data received from API", ErrAPIRequestFailed)
 	}
 
 	// Set the URL field to the original input URL for consistency
 	show.URL = showURL
 
-	log.Printf("[MIXCLOUD] Successfully fetched show: %s", show.Name)
+	log.Info("Successfully fetched show from Mixcloud API", 
+		slog.String("show_name", show.Name),
+		slog.String("show_key", show.Key),
+		slog.Duration("total_duration", time.Since(startTime)))
+
 	return &show, nil
 }
 

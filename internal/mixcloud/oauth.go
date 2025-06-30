@@ -3,7 +3,7 @@ package mixcloud
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os/exec"
 	"runtime"
@@ -12,6 +12,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/nowwaveradio/mixcloud-updater/internal/config"
+	"github.com/nowwaveradio/mixcloud-updater/internal/logger"
 )
 
 // AIDEV-NOTE: OAuth flow handler for browser-based Mixcloud authentication
@@ -64,14 +65,26 @@ func NewOAuthFlow(clientID, clientSecret string, callbackPort int) *OAuthFlow {
 
 // Authorize initiates the OAuth flow and returns the access token
 func (o *OAuthFlow) Authorize(ctx context.Context) (*oauth2.Token, error) {
+	log := logger.Get()
+	
+	log.Info("Starting OAuth authorization flow", 
+		slog.String("redirect_uri", o.redirectURI),
+		slog.Int("callback_port", o.callbackPort))
+
 	// Start the local callback server
 	if err := o.startCallbackServer(); err != nil {
+		log.Error("Failed to start OAuth callback server", 
+			slog.String("error", err.Error()),
+			slog.Int("port", o.callbackPort))
 		return nil, fmt.Errorf("failed to start callback server: %w", err)
 	}
 
 	// Generate the authorization URL using Mixcloud's simple OAuth flow
 	// Mixcloud doesn't support Google-style OAuth parameters like access_type=offline
 	authURL := o.config.AuthCodeURL("state")
+	
+	log.Info("Generated OAuth authorization URL", 
+		slog.String("url", authURL))
 
 	// Open the browser to the authorization URL
 	fmt.Printf("Opening browser for Mixcloud authorization...\n")
@@ -79,12 +92,19 @@ func (o *OAuthFlow) Authorize(ctx context.Context) (*oauth2.Token, error) {
 	fmt.Printf("%s\n\n", authURL)
 
 	if err := o.openBrowser(authURL); err != nil {
-		log.Printf("Failed to open browser automatically: %v", err)
+		log.Warn("Failed to open browser automatically", 
+			slog.String("error", err.Error()),
+			slog.String("os", runtime.GOOS))
 		fmt.Printf("Please manually open the URL above in your browser.\n\n")
+	} else {
+		log.Debug("Browser opened successfully")
 	}
 
 	// Wait for the OAuth callback or timeout
 	fmt.Printf("Waiting for authorization (timeout: %v)...\n", CallbackTimeout)
+	
+	log.Info("Waiting for OAuth callback", 
+		slog.Duration("timeout", CallbackTimeout))
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, CallbackTimeout)
 	defer cancel()
@@ -92,19 +112,25 @@ func (o *OAuthFlow) Authorize(ctx context.Context) (*oauth2.Token, error) {
 	select {
 	case token := <-o.resultChan:
 		o.shutdown()
+		log.Info("OAuth authorization successful", 
+			slog.Bool("has_access_token", token.AccessToken != ""),
+			slog.Time("expires", token.Expiry))
 		fmt.Printf("✓ Authorization successful!\n")
 		return token, nil
 
 	case err := <-o.errorChan:
 		o.shutdown()
+		log.Error("OAuth flow failed", slog.String("error", err.Error()))
 		return nil, fmt.Errorf("OAuth flow failed: %w", err)
 
 	case <-timeoutCtx.Done():
 		o.shutdown()
+		log.Error("OAuth flow timed out", slog.Duration("timeout", CallbackTimeout))
 		return nil, fmt.Errorf("OAuth flow timed out after %v", CallbackTimeout)
 
 	case <-ctx.Done():
 		o.shutdown()
+		log.Error("OAuth flow cancelled", slog.String("error", ctx.Err().Error()))
 		return nil, fmt.Errorf("OAuth flow cancelled: %w", ctx.Err())
 	}
 }
@@ -281,7 +307,8 @@ func (o *OAuthFlow) shutdown() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := o.server.Shutdown(ctx); err != nil {
-			log.Printf("Error shutting down OAuth callback server: %v", err)
+			log := logger.Get()
+			log.Error("Error shutting down OAuth callback server", slog.String("error", err.Error()))
 		}
 	}
 }

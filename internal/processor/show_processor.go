@@ -6,7 +6,6 @@ package processor
 import (
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/nowwaveradio/mixcloud-updater/internal/cue"
 	"github.com/nowwaveradio/mixcloud-updater/internal/filter"
 	"github.com/nowwaveradio/mixcloud-updater/internal/formatter"
+	"github.com/nowwaveradio/mixcloud-updater/internal/logger"
 	"github.com/nowwaveradio/mixcloud-updater/internal/mixcloud"
 	"github.com/nowwaveradio/mixcloud-updater/internal/shows"
 )
@@ -100,10 +100,8 @@ func NewShowProcessor(cfg *config.Config, configPath string) (*ShowProcessor, er
 		return nil, fmt.Errorf("initializing Mixcloud client: %w", err)
 	}
 
-	// Initialize structured logger
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
+	// Use the global file logger
+	log := logger.Get()
 
 	return &ShowProcessor{
 		config:      cfg,
@@ -113,7 +111,7 @@ func NewShowProcessor(cfg *config.Config, configPath string) (*ShowProcessor, er
 		filter:      trackFilter,
 		formatter:   trackFormatter,
 		mixcloud:    mixcloudClient,
-		logger:      logger,
+		logger:      log.Logger, // Use the underlying slog.Logger
 	}, nil
 }
 

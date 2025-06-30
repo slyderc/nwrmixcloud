@@ -10,6 +10,7 @@ import (
 	"strings"
 	
 	"github.com/BurntSushi/toml"
+	"github.com/nowwaveradio/mixcloud-updater/internal/logger"
 )
 
 // AIDEV-TODO: Implement TOML parsing with BurntSushi/toml library
@@ -53,6 +54,8 @@ type Config struct {
 		AutoProcess      bool   `toml:"auto_process"`
 		BatchSize        int    `toml:"batch_size"`
 	} `toml:"processing"`
+	
+	Logging logger.Config `toml:"logging"`
 }
 
 // TemplateConfig represents a template configuration for tracklist formatting
@@ -241,6 +244,15 @@ func DefaultConfig() *Config {
 			AutoProcess:      false,
 			BatchSize:        5, // Process 5 shows at a time by default
 		},
+		Logging: logger.Config{
+			Enabled:         true,
+			Directory:       "logs",
+			FilenamePattern: "mixcloud-updater-%Y%m%d.log",
+			Level:           "info",
+			MaxFiles:        30,
+			MaxSizeMB:       10,
+			ConsoleOutput:   true,
+		},
 	}
 }
 
@@ -322,6 +334,30 @@ func mergeWithDefaults(loaded, defaults *Config) *Config {
 	}
 	if loaded.Processing.BatchSize > 0 {
 		result.Processing.BatchSize = loaded.Processing.BatchSize
+	}
+
+	// Merge Logging values
+	if loaded.Logging.Directory != "" {
+		result.Logging.Directory = loaded.Logging.Directory
+	}
+	if loaded.Logging.FilenamePattern != "" {
+		result.Logging.FilenamePattern = loaded.Logging.FilenamePattern
+	}
+	if loaded.Logging.Level != "" {
+		result.Logging.Level = loaded.Logging.Level
+	}
+	if loaded.Logging.MaxFiles > 0 {
+		result.Logging.MaxFiles = loaded.Logging.MaxFiles
+	}
+	if loaded.Logging.MaxSizeMB > 0 {
+		result.Logging.MaxSizeMB = loaded.Logging.MaxSizeMB
+	}
+	// Handle boolean fields explicitly (since false is a valid value)
+	if loaded.Logging.Enabled != result.Logging.Enabled {
+		result.Logging.Enabled = loaded.Logging.Enabled
+	}
+	if loaded.Logging.ConsoleOutput != result.Logging.ConsoleOutput {
+		result.Logging.ConsoleOutput = loaded.Logging.ConsoleOutput
 	}
 
 	return &result

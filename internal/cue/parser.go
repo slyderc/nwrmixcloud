@@ -6,11 +6,14 @@ package cue
 import (
 	"bufio"
 	"fmt"
+	"log/slog"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/nowwaveradio/mixcloud-updater/internal/logger"
 )
 
 // AIDEV-TODO: Implement CUE file line-by-line parsing
@@ -502,20 +505,30 @@ func (tp *trackParser) finish() *CueSheet {
 // ParseCueFile parses a CUE file and returns a CueSheet with track information
 // AIDEV-NOTE: Main entry point for CUE file parsing - orchestrates the entire process
 func ParseCueFile(filename string) (*CueSheet, error) {
+	log := logger.Get()
+	
+	log.Info("Starting CUE file parsing", 
+		slog.String("filename", filename))
+
 	// Open and initialize the line parser
 	parser, err := newLineParser(filename)
 	if err != nil {
+		log.Error("Failed to open CUE file", 
+			slog.String("filename", filename),
+			slog.String("error", err.Error()))
 		return nil, fmt.Errorf("failed to open CUE file '%s': %w", filename, err)
 	}
 	defer func() {
 		if closeErr := parser.Close(); closeErr != nil {
-			// AIDEV-NOTE: Log the close error but don't override the main error
-			_ = closeErr
+			log.Warn("Failed to close CUE file", 
+				slog.String("filename", filename),
+				slog.String("error", closeErr.Error()))
 		}
 	}()
 
 	// Initialize the track parser
 	trackParser := newTrackParser()
+	lineCount := 0
 
 	// Process the file line by line
 	for {
@@ -523,25 +536,50 @@ func ParseCueFile(filename string) (*CueSheet, error) {
 		if !hasMore {
 			break
 		}
+		lineCount++
 
 		// Process the parsed line
 		if err := trackParser.processLine(line); err != nil {
+			log.Error("CUE file parsing error", 
+				slog.String("filename", filename),
+				slog.Int("line_number", line.LineNum),
+				slog.String("line_content", line.Raw),
+				slog.String("error", err.Error()))
 			return nil, fmt.Errorf("parsing error in '%s': %w", filename, err)
 		}
 	}
 
+	log.Debug("CUE file lines processed", 
+		slog.String("filename", filename),
+		slog.Int("total_lines", lineCount))
+
 	// Check for scanner errors
 	if err := parser.hasError(); err != nil {
+		log.Error("Error reading CUE file", 
+			slog.String("filename", filename),
+			slog.String("error", err.Error()))
 		return nil, fmt.Errorf("error reading CUE file '%s': %w", filename, err)
 	}
 
 	// Finalize parsing and get the result
 	cueSheet := trackParser.finish()
+	
+	log.Info("CUE file parsing completed", 
+		slog.String("filename", filename),
+		slog.Int("track_count", len(cueSheet.Tracks)),
+		slog.String("album_title", cueSheet.Title),
+		slog.String("album_performer", cueSheet.Performer))
 
 	// Validate the parsed result
 	if err := validateCueSheet(cueSheet); err != nil {
+		log.Error("CUE file validation failed", 
+			slog.String("filename", filename),
+			slog.String("error", err.Error()))
 		return nil, fmt.Errorf("validation failed for '%s': %w", filename, err)
 	}
+
+	log.Debug("CUE file validation successful", 
+		slog.String("filename", filename))
 
 	return cueSheet, nil
 }

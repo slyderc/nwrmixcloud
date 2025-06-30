@@ -3,11 +3,14 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/nowwaveradio/mixcloud-updater/internal/config"
+	"github.com/nowwaveradio/mixcloud-updater/internal/logger"
 	"github.com/nowwaveradio/mixcloud-updater/internal/mixcloud"
 	"github.com/nowwaveradio/mixcloud-updater/internal/processor"
 	"github.com/nowwaveradio/mixcloud-updater/internal/shows"
@@ -138,12 +141,14 @@ func validateConfigFile(filePath string) error {
 
 // loadConfiguration loads and validates the configuration file with automatic OAuth if needed
 func loadConfiguration(configPath string) (*config.Config, error) {
+	log := logger.Get()
 	cleanPath := filepath.Clean(configPath)
 	
 	// Check if config file exists
 	if _, err := os.Stat(cleanPath); err != nil {
 		if os.IsNotExist(err) {
 			// Config file doesn't exist - create a default one
+			log.Info("Config file not found, creating default", slog.String("path", cleanPath))
 			defaultCfg := config.DefaultConfig()
 			if err := config.SaveConfig(defaultCfg, cleanPath); err != nil {
 				return nil, fmt.Errorf("failed to create default config file: %w", err)
@@ -164,25 +169,34 @@ func loadConfiguration(configPath string) (*config.Config, error) {
 	
 	// Apply environment variable overrides
 	cfg.ApplyEnvironmentOverrides()
+	log.Debug("Applied environment variable overrides")
 	
 	// Check if we need OAuth authorization
 	if needsAuthorization(cfg) {
 		// Validate OAuth credentials are present
 		if cfg.OAuth.ClientID == "" || cfg.OAuth.ClientSecret == "" {
+			log.Error("OAuth credentials missing", 
+				slog.String("config_file", cleanPath),
+				slog.Bool("has_client_id", cfg.OAuth.ClientID != ""),
+				slog.Bool("has_client_secret", cfg.OAuth.ClientSecret != ""))
 			return nil, fmt.Errorf("OAuth client_id and client_secret must be configured in %s", cleanPath)
 		}
 		if cfg.Station.MixcloudUsername == "" {
+			log.Error("Mixcloud username missing", slog.String("config_file", cleanPath))
 			return nil, fmt.Errorf("station.mixcloud_username must be configured in %s", cleanPath)
 		}
 		
+		log.Info("OAuth authorization required", slog.String("username", cfg.Station.MixcloudUsername))
 		fmt.Printf("🔑 OAuth authorization required - launching browser...\n")
 		
 		// Perform the OAuth flow
 		err = mixcloud.AuthorizeAndSave(cfg, cleanPath)
 		if err != nil {
+			log.Error("OAuth authorization failed", slog.String("error", err.Error()))
 			return nil, fmt.Errorf("authorization failed: %w", err)
 		}
 		
+		log.Info("OAuth authorization successful, reloading config")
 		// Reload the configuration with new tokens
 		cfg, err = config.LoadConfig(cleanPath)
 		if err != nil {
@@ -193,8 +207,14 @@ func loadConfiguration(configPath string) (*config.Config, error) {
 	
 	// Validate the final configuration
 	if err := cfg.Validate(); err != nil {
+		log.Error("Configuration validation failed", slog.String("error", err.Error()))
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
 	}
+	
+	log.Info("Configuration loaded successfully", 
+		slog.String("station", cfg.Station.Name),
+		slog.String("username", cfg.Station.MixcloudUsername),
+		slog.Int("shows", len(cfg.Shows)))
 	
 	return cfg, nil
 }
@@ -224,17 +244,36 @@ func needsAuthorization(cfg *config.Config) bool {
 
 
 func main() {
+	startTime := time.Now()
+	var exitCode int
+	var executionResults []string
+	var log *logger.Logger
+
+	// Ensure cleanup happens on exit
+	defer func() {
+		if log != nil {
+			// Log execution summary
+			mode := "Batch Processing"
+			if *showAlias != "" {
+				mode = fmt.Sprintf("Single Show (%s)", *showAlias)
+			}
+			log.LogExecutionSummary(startTime, *configFile, mode, executionResults, exitCode)
+			log.Close()
+		}
+		os.Exit(exitCode)
+	}()
+
 	flag.Parse()
 
 	// Handle help and version flags
 	if *help {
 		flag.Usage()
-		os.Exit(0)
+		return
 	}
 
 	if *showVersion {
 		fmt.Printf("Mixcloud Updater v%s\n", version)
-		os.Exit(0)
+		return
 	}
 
 	// Determine config file path - support single positional argument
@@ -244,69 +283,128 @@ func main() {
 	} else if flag.NArg() > 1 {
 		fmt.Fprintf(os.Stderr, "Error: Too many arguments. Expected at most one config file path.\n\n")
 		flag.Usage()
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 
-	// Print banner
+	// Load configuration to get logging settings
+	// Initial load for logging setup - errors go to stderr
+	initialCfg, err := config.LoadConfig(configFilePath)
+	if err == nil {
+		// Initialize logging system
+		if logErr := logger.Initialize(initialCfg.Logging); logErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to initialize logging: %v\n", logErr)
+		}
+		log = logger.Get()
+	} else {
+		// If config doesn't exist yet, use default logging config
+		defaultCfg := config.DefaultConfig()
+		if logErr := logger.Initialize(defaultCfg.Logging); logErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to initialize logging: %v\n", logErr)
+		}
+		log = logger.Get()
+	}
+
+	// From here on, use structured logging
+	log.Info("Mixcloud Updater started", 
+		slog.String("version", version),
+		slog.String("config_file", configFilePath),
+		slog.String("command", strings.Join(os.Args, " ")))
+
+	// Print banner (keep console output for user experience)
 	fmt.Printf("Mixcloud Updater v%s\n", version)
 	fmt.Printf("=================================\n\n")
 
 	// Validate arguments
 	if err := validateArguments(configFilePath); err != nil {
+		log.Error("Argument validation failed", slog.String("error", err.Error()))
 		fmt.Fprintf(os.Stderr, "Error: %v\n\n", err)
 		flag.Usage()
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 
 	// Load configuration
 	fmt.Printf("Loading configuration: %s\n", configFilePath)
+	log.Info("Loading configuration", slog.String("path", configFilePath))
 	cfg, err := loadConfiguration(configFilePath)
 	if err != nil {
+		log.Error("Configuration loading failed", slog.String("error", err.Error()))
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 
 	// Handle list operations
 	if *listShows {
+		log.Info("Listing available shows")
 		if err := listAvailableShows(cfg); err != nil {
+			log.Error("Failed to list shows", slog.String("error", err.Error()))
 			fmt.Fprintf(os.Stderr, "Error listing shows: %v\n", err)
-			os.Exit(1)
+			exitCode = 1
+			return
 		}
-		os.Exit(0)
+		return
 	}
 
 	if *listTemplates {
+		log.Info("Listing available templates")
 		if err := listAvailableTemplates(cfg); err != nil {
+			log.Error("Failed to list templates", slog.String("error", err.Error()))
 			fmt.Fprintf(os.Stderr, "Error listing templates: %v\n", err)
-			os.Exit(1)
+			exitCode = 1
+			return
 		}
-		os.Exit(0)
+		return
 	}
 
 	// Create show processor  
+	log.Info("Initializing show processor")
 	showProcessor, err := processor.NewShowProcessor(cfg, configFilePath)
 	if err != nil {
+		log.Error("Failed to initialize processor", slog.String("error", err.Error()))
 		fmt.Fprintf(os.Stderr, "Error initializing processor: %v\n", err)
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 
 	// Execute processing based on arguments
 	if *showAlias != "" {
 		// Process specific show
+		log.Info("Processing single show", 
+			slog.String("show", *showAlias),
+			slog.String("template", *templateName),
+			slog.String("date_override", *dateOverride),
+			slog.Bool("dry_run", *dryRun))
+		
 		if err := showProcessor.ProcessShow(*showAlias, *templateName, *dateOverride, *dryRun); err != nil {
+			log.Error("Show processing failed", 
+				slog.String("show", *showAlias),
+				slog.String("error", err.Error()))
+			executionResults = append(executionResults, fmt.Sprintf("%s: FAILED - %v", *showAlias, err))
 			fmt.Fprintf(os.Stderr, "Error processing show: %v\n", err)
 			handleAuthError(err)
-			os.Exit(1)
+			exitCode = 1
+			return
 		}
+		executionResults = append(executionResults, fmt.Sprintf("%s: SUCCESS", *showAlias))
 	} else {
 		// Process all enabled shows
+		log.Info("Processing all enabled shows", slog.Bool("dry_run", *dryRun))
+		
 		if err := showProcessor.ProcessAllShows(*dryRun); err != nil {
+			log.Error("Batch processing failed", slog.String("error", err.Error()))
+			// The error message already contains the count of failed shows
+			executionResults = append(executionResults, fmt.Sprintf("Batch processing: %v", err))
 			fmt.Fprintf(os.Stderr, "Error processing shows: %v\n", err)
 			handleAuthError(err)
-			os.Exit(1)
+			exitCode = 1
+			return
 		}
+		executionResults = append(executionResults, "Batch processing: SUCCESS")
 	}
 
+	log.Info("Processing completed successfully")
 	fmt.Println("✓ Done!")
 }
 
