@@ -210,8 +210,8 @@ func (tf *TemplateFormatter) FormatWithTemplate(templateName string, tracks []cu
 		result.WriteString(trackOutput)
 	}
 
-	// Add footer if there's still space
-	if footerOutput != "" && result.Len()+len(footerOutput) <= maxLength {
+	// Add footer (space was pre-reserved during truncation calculation)
+	if footerOutput != "" {
 		result.WriteString(footerOutput)
 	}
 

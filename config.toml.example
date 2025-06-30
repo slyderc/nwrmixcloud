@@ -1,8 +1,9 @@
 # Mixcloud Updater Configuration
-# Copy this file to 'config.toml' and update the values below
+# Copy this file to 'config.toml' and update values below
+# Unified config-driven architecture with show management and templating
 
 [station]
-# Your radio station name (appears in logs)
+# Your radio station name (appears in logs and templates)
 name = "Your Radio Station Name"
 
 # Your Mixcloud username (the part after mixcloud.com/ in your profile URL)
@@ -21,17 +22,16 @@ access_token = ""
 refresh_token = ""
 
 [filtering]
+# Multi-layer filtering system: exact match, substring contains, regex patterns
+
 # Artists to exclude from tracklists (case-insensitive exact matches)
 excluded_artists = [
     "Station ID",
-    "Commercial",
+    "Commercial", 
     "Sweeper",
     "Promo",
     "Ident",
-    "Jingle",
-    "Advertisement",
-    "PSA",
-    "Public Service Announcement"
+    "Jingle"
 ]
 
 # Track titles to exclude from tracklists (case-insensitive exact matches)
@@ -40,38 +40,108 @@ excluded_titles = [
     "Commercial Break",
     "News Update",
     "Weather Report",
-    "Traffic Update",
-    "Time Check",
-    "Legal ID",
-    "Underwriting",
-    "Sponsorship Message"
+    "Traffic Update"
 ]
 
-# Artist patterns to exclude (regular expressions - case-insensitive)
+# Artist patterns to exclude (regular expressions)
 excluded_artist_patterns = [
     "(?i)sweeper",
-    "(?i)promo",
+    "(?i)promo", 
     "(?i)commercial",
-    "(?i)advertisement",
-    "(?i)station.*id",
-    "(?i)legal.*id"
+    "(?i)station.*id"
 ]
 
-# Title patterns to exclude (regular expressions - case-insensitive)
+# Title patterns to exclude (regular expressions)
 excluded_title_patterns = [
     "(?i)advertisement",
     "(?i)commercial",
     "(?i)sponsored.*by",
-    "(?i)brought.*to.*you.*by",
-    "(?i)weather.*brought",
-    "(?i)news.*update",
-    "(?i)traffic.*report"
+    "(?i)news.*update"
 ]
 
-[paths]
-# Directory where CUE files are stored (optional - can specify file path in command)
+[processing]
+# Global processing configuration
 cue_file_directory = "/path/to/your/cue/files"
+auto_process = false  # Process all enabled shows automatically
+batch_size = 5       # Number of shows to process concurrently
 
-# Examples for common Myriad setups:
-# Windows: "C:\\Myriad\\Audio\\CUE"
-# Linux/Mac: "/opt/myriad/audio/cue"
+[templates]
+# Default template name when no show-specific template is specified
+default = "classic"
+
+# Template definitions for tracklist formatting
+# Header/Footer templates receive: .ShowTitle, .ShowDate, .StationName, .TrackCount
+# Track templates receive: .StartTime, .Artist, .Title, .Genre, .Index
+# Custom functions: upper, lower, title, truncate, repeat, printf, join, add, sub
+
+[templates.templates.classic]
+header = "Tracklist for {{.ShowTitle}}:\n\n"
+track = "{{.StartTime}} - \"{{.Title}}\" by {{.Artist}}\n"
+footer = "\n#{{lower .StationName}} #mixcloud"
+
+[templates.templates.detailed]
+header = "🎵 {{upper .ShowTitle}} - {{.ShowDate}} 🎵\n\nFeaturing {{.TrackCount}} tracks:\n\n"
+track = "{{.Index}}. {{.StartTime}} - {{.Artist}} - {{.Title}}\n"
+footer = "\n✨ Curated by {{.StationName}} ✨\n#{{lower .StationName}} #mixcloud"
+
+[templates.templates.minimal]
+header = ""
+track = "{{.StartTime}} {{.Artist}} - {{.Title}}\n"
+footer = ""
+
+# Show configurations - each key represents a show identifier
+# Shows can be processed individually by alias or in batch mode
+
+[shows.sounds-like]
+# CUE file detection (uses filepath.Glob for pattern matching)
+cue_file_pattern = "MYR_SoundsLike_*.cue"
+show_name_pattern = "Sounds Like - {date}"
+
+# Show identification and aliases for CLI lookup
+aliases = ["sounds-like", "sl", "soundslike"]
+
+# Template selection (hierarchy: custom_template > template_name > default > "classic")
+template_name = "detailed"
+# custom_template = "{{.StartTime}} {{.Artist}} - {{.Title}}\n"  # Inline override
+
+# Date extraction from CUE filename (requires capture group in parentheses)
+date_extraction = "SoundsLike_(\\d{4}-\\d{2}-\\d{2})"  # Extracts YYYY-MM-DD
+date_format = "2006-01-02"  # Go time format (currently unused - TODO in code)
+
+# Processing control
+enabled = true    # Include in batch processing
+priority = 1      # Processing order (higher numbers first)
+
+[shows.new-wave-revival]
+cue_file_pattern = "MYR_NewWave_*.cue"
+show_name_pattern = "New Wave Revival - {date}"
+aliases = ["new-wave", "nwr", "revival"]
+template_name = "classic"
+date_extraction = "NewWave_(\\d{4}_\\d{2}_\\d{2})"  # Extracts YYYY_MM_DD format
+enabled = true
+priority = 2
+
+[shows.morning-show]
+cue_file_pattern = "Morning_*.cue"
+show_name_pattern = "Morning Show - {date}"
+aliases = ["morning", "ms"]
+template_name = "minimal"
+# Alternative: direct file mapping instead of pattern
+# cue_file_mapping = "latest_morning.cue"
+enabled = false   # Disabled - won't be processed in batch mode
+priority = 3
+
+# Alternative show using custom inline template
+[shows.weekend-mix]
+cue_file_pattern = "Weekend_*.cue"
+show_name_pattern = "Weekend Mix - {date}"
+aliases = ["weekend", "wm"]
+# Custom template instead of named template
+custom_template = "{{.StartTime}} | {{.Title}} by {{.Artist}}\n"
+date_extraction = "Weekend_(\\d{8})"  # Extracts YYYYMMDD
+enabled = true
+priority = 4
+
+# Legacy paths section - use processing.cue_file_directory instead
+[paths]
+cue_file_directory = "/path/to/your/cue/files"
