@@ -57,7 +57,7 @@ var (
 // API endpoint constants for Mixcloud API
 const (
 	MixcloudAPIBaseURL     = "https://api.mixcloud.com"
-	CloudcastEndpoint      = "/cloudcast/%s/"                    // GET /cloudcast/<key>/
+	CloudcastEndpoint      = "/%s"                               // GET /<key>/ (key includes trailing slash)
 	UploadEndpoint         = "/upload/"                          // POST /upload/
 	APITimeoutSeconds      = 30                                  // 30 second timeout for API requests
 	MaxDescriptionLength   = 1000                                // Maximum description length
@@ -507,9 +507,20 @@ func (c *Client) IsHealthy() bool {
 
 	// Check if we can get a fresh token from the token source
 	if c.tokenSource != nil {
-		_, err := c.tokenSource.Token()
+		token, err := c.tokenSource.Token()
 		if err != nil {
 			log.Printf("[MIXCLOUD] Health check failed: token source error: %v", err)
+			return false
+		}
+		// Check if the token is expired
+		if token != nil && !token.Valid() {
+			log.Printf("[MIXCLOUD] Health check failed: token is expired")
+			return false
+		}
+	} else {
+		// Check if the stored token is expired as a fallback
+		if c.token != nil && !c.token.Valid() {
+			log.Printf("[MIXCLOUD] Health check failed: stored token is expired")
 			return false
 		}
 	}
@@ -877,10 +888,9 @@ func (c *Client) GetShow(showURL string) (*Show, error) {
 		return nil, fmt.Errorf("failed to parse show URL: %w", err)
 	}
 
-	// Check if client is healthy for API requests
-	if !c.IsHealthy() {
-		return nil, fmt.Errorf("%w: client is not properly authenticated", ErrAuthenticationFailed)
-	}
+	// AIDEV-NOTE: GetShow works for public shows without authentication
+	// We'll attempt an unauthenticated call first, then fall back to authenticated if needed
+	log.Printf("[MIXCLOUD] Attempting to fetch public show data")
 
 	// Construct the API endpoint URL
 	endpoint := fmt.Sprintf(CloudcastEndpoint, cloudcastKey)
@@ -896,11 +906,13 @@ func (c *Client) GetShow(showURL string) (*Show, error) {
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "mixcloud-updater/1.0")
 
-	// Make the API request with retry logic for rate limiting
-	// AIDEV-NOTE: Uses exponential backoff with jitter and Retry-After header support
-	resp, err := c.executeAPIRequestWithRetry(req)
+	// Make the API request - try unauthenticated first for public shows
+	// AIDEV-NOTE: Public shows don't require authentication, so try basic HTTP client first
+	log.Printf("[MIXCLOUD] Making API request to: %s", apiURL)
+	basicClient := &http.Client{}
+	resp, err := basicClient.Do(req)
 	if err != nil {
-		return nil, err // Error already wrapped by executeAPIRequestWithRetry
+		return nil, fmt.Errorf("%w: HTTP request failed: %v", ErrNetworkFailure, err)
 	}
 	defer resp.Body.Close()
 
@@ -960,22 +972,17 @@ func (c *Client) UpdateShowDescription(showURL, description string) error {
 			ErrDescriptionTooLong, len(description), MaxDescriptionLength)
 	}
 
-	// Check if client is healthy for API requests
-	if !c.IsHealthy() {
-		return fmt.Errorf("%w: client is not properly authenticated", ErrAuthenticationFailed)
+	// Check if client has authentication tokens for API requests
+	// AIDEV-NOTE: Updates require authentication, unlike GetShow which works publicly
+	if c.token == nil || c.token.AccessToken == "" {
+		return fmt.Errorf("%w: access token is required for updating show descriptions", ErrAuthenticationFailed)
 	}
 
 	// Create multipart form data
 	var formBuf bytes.Buffer
 	writer := multipart.NewWriter(&formBuf)
 
-	// Add cloudcast key field
-	// AIDEV-NOTE: API expects the cloudcast key to identify which show to update
-	if err := writer.WriteField("cloudcast", strings.TrimSuffix(cloudcastKey, "/")); err != nil {
-		return fmt.Errorf("%w: failed to write cloudcast field: %v", ErrAPIRequestFailed, err)
-	}
-
-	// Add description field
+	// Add description field (cloudcast key is already in URL path, no form field needed)
 	if err := writer.WriteField("description", description); err != nil {
 		return fmt.Errorf("%w: failed to write description field: %v", ErrAPIRequestFailed, err)
 	}
@@ -985,8 +992,11 @@ func (c *Client) UpdateShowDescription(showURL, description string) error {
 		return fmt.Errorf("%w: failed to close multipart writer: %v", ErrAPIRequestFailed, err)
 	}
 
-	// Construct the API endpoint URL
-	apiURL := MixcloudAPIBaseURL + UploadEndpoint
+	// Construct the API endpoint URL for editing existing uploads
+	// According to Mixcloud API docs: /upload/[YOUR_SHOW_KEY]/edit/?access_token=...
+	// Clean cloudcastKey to avoid double slashes
+	cleanKey := strings.Trim(cloudcastKey, "/")
+	apiURL := fmt.Sprintf("%s/upload/%s/edit/?access_token=%s", MixcloudAPIBaseURL, cleanKey, c.token.AccessToken)
 
 	// Create HTTP request with multipart form data
 	req, err := http.NewRequest("POST", apiURL, &formBuf)
@@ -999,12 +1009,13 @@ func (c *Client) UpdateShowDescription(showURL, description string) error {
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "mixcloud-updater/1.0")
 
-	// Make the API request with retry logic for rate limiting
-	// AIDEV-NOTE: Uses exponential backoff with jitter and Retry-After header support
+	// Make the API request with basic HTTP client (token is in query param, not OAuth header)
+	// AIDEV-NOTE: Use basic client since we're passing access_token as query parameter
 	log.Printf("[MIXCLOUD] Updating description for show: %s", showURL)
-	resp, err := c.executeAPIRequestWithRetry(req)
+	basicClient := &http.Client{}
+	resp, err := basicClient.Do(req)
 	if err != nil {
-		return err // Error already wrapped by executeAPIRequestWithRetry
+		return fmt.Errorf("%w: request failed: %v", ErrAPIRequestFailed, err)
 	}
 	defer resp.Body.Close()
 

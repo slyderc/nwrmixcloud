@@ -37,9 +37,14 @@ func init() {
 		fmt.Fprintf(os.Stderr, "Optional flags:\n")
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
+		fmt.Fprintf(os.Stderr, "  # Update a show\n")
 		fmt.Fprintf(os.Stderr, "  %s -cue-file MYR04137.cue -show-name \"The Newer New Wave Show\"\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "\n  # Preview without updating\n")
 		fmt.Fprintf(os.Stderr, "  %s -cue-file MYR04137.cue -show-name \"The Newer New Wave Show\" -dry-run\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  %s -cue-file MYR04137.cue -show-name \"The Newer New Wave Show\" -config custom.toml\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "\n  # Automation with cron\n")
+		fmt.Fprintf(os.Stderr, "  0 */2 * * * /path/to/mixcloud-updater -cue-file /shows/latest.cue -show-name \"Weekly Show\"\n")
+		fmt.Fprintf(os.Stderr, "\n  # Batch processing\n")
+		fmt.Fprintf(os.Stderr, "  for f in *.cue; do %s -cue-file \"$f\" -show-name \"Show $(date +%%m-%%d-%%Y)\"; done\n", os.Args[0])
 	}
 }
 
@@ -166,25 +171,22 @@ func validateShowName(name string) error {
 	return nil
 }
 
-// loadConfiguration loads and validates the configuration file
+// loadConfiguration loads and validates the configuration file with automatic OAuth if needed
 func loadConfiguration(configPath string) (*config.Config, error) {
 	cleanPath := filepath.Clean(configPath)
 	
 	// Check if config file exists
 	if _, err := os.Stat(cleanPath); err != nil {
 		if os.IsNotExist(err) {
-			// Config file doesn't exist - try to create a default one
-			fmt.Printf("Config file not found: %s\n", cleanPath)
-			fmt.Printf("Creating default configuration file...\n")
-			
+			// Config file doesn't exist - create a default one
 			defaultCfg := config.DefaultConfig()
 			if err := config.SaveConfig(defaultCfg, cleanPath); err != nil {
 				return nil, fmt.Errorf("failed to create default config file: %w", err)
 			}
 			
-			fmt.Printf("Default configuration created at: %s\n", cleanPath)
-			fmt.Printf("Please edit this file with your Mixcloud OAuth credentials before running again.\n")
-			return nil, fmt.Errorf("configuration file created - please update with your credentials and run again")
+			fmt.Printf("Created config file: %s\n", cleanPath)
+			fmt.Printf("Please edit this file with your Mixcloud OAuth credentials, then run again.\n")
+			return nil, fmt.Errorf("configuration file created")
 		}
 		return nil, fmt.Errorf("cannot access config file: %w", err)
 	}
@@ -192,34 +194,68 @@ func loadConfiguration(configPath string) (*config.Config, error) {
 	// Load the configuration
 	cfg, err := config.LoadConfig(cleanPath)
 	if err != nil {
-		// Provide specific error messages for common config issues
-		if strings.Contains(err.Error(), "toml") {
-			return nil, fmt.Errorf("invalid TOML format in config file %s: %w", cleanPath, err)
-		}
-		return nil, fmt.Errorf("failed to load config from %s: %w", cleanPath, err)
+		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 	
 	// Apply environment variable overrides
 	cfg.ApplyEnvironmentOverrides()
 	
-	// Validate the loaded configuration
+	// Check if we need OAuth authorization
+	if needsAuthorization(cfg) {
+		// Validate OAuth credentials are present
+		if cfg.OAuth.ClientID == "" || cfg.OAuth.ClientSecret == "" {
+			return nil, fmt.Errorf("OAuth client_id and client_secret must be configured in %s", cleanPath)
+		}
+		if cfg.Station.MixcloudUsername == "" {
+			return nil, fmt.Errorf("station.mixcloud_username must be configured in %s", cleanPath)
+		}
+		
+		fmt.Printf("🔑 OAuth authorization required - launching browser...\n")
+		
+		// Perform the OAuth flow
+		err = mixcloud.AuthorizeAndSave(cfg, cleanPath)
+		if err != nil {
+			return nil, fmt.Errorf("authorization failed: %w", err)
+		}
+		
+		// Reload the configuration with new tokens
+		cfg, err = config.LoadConfig(cleanPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to reload config after authorization: %w", err)
+		}
+		cfg.ApplyEnvironmentOverrides()
+	}
+	
+	// Validate the final configuration
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
 	}
 	
-	// Log some configuration details (without sensitive info)
-	fmt.Printf("Station: %s\n", cfg.Station.Name)
-	fmt.Printf("Mixcloud Username: %s\n", cfg.Station.MixcloudUsername)
-	hasTokens := cfg.OAuth.AccessToken != "" && cfg.OAuth.RefreshToken != ""
-	fmt.Printf("OAuth Tokens: %s\n", func() string {
-		if hasTokens {
-			return "configured"
-		}
-		return "missing - OAuth flow required"
-	}())
-	
 	return cfg, nil
 }
+
+
+// needsAuthorization checks if OAuth authorization is needed
+func needsAuthorization(cfg *config.Config) bool {
+	if cfg == nil {
+		return true
+	}
+	
+	// Check if OAuth credentials are missing
+	if cfg.OAuth.ClientID == "" || cfg.OAuth.ClientSecret == "" {
+		return true
+	}
+	
+	// Check if access token is missing
+	// AIDEV-NOTE: Mixcloud doesn't provide refresh tokens, only access tokens
+	if cfg.OAuth.AccessToken == "" {
+		return true
+	}
+	
+	return false
+}
+
+
 
 // WorkflowResult contains the results of workflow execution for reporting
 type WorkflowResult struct {
@@ -242,8 +278,8 @@ func executeWorkflow(cfg *config.Config, cueFilePath, showName string, dryRun bo
 		DryRun:        dryRun,
 		StepDurations: stepDurations,
 	}
-	// Step 1: Parse CUE file
-	fmt.Printf("Step 1: Parsing CUE file...\n")
+	// Parse CUE file
+	fmt.Printf("Parsing CUE file...\n")
 	stepStart := time.Now()
 	cueSheet, err := cue.ParseCueFile(cueFilePath)
 	if err != nil {
@@ -251,20 +287,17 @@ func executeWorkflow(cfg *config.Config, cueFilePath, showName string, dryRun bo
 	}
 	stepDurations["parse"] = time.Since(stepStart)
 	result.ParsedTracks = len(cueSheet.Tracks)
-	fmt.Printf("✓ Parsed %d tracks from CUE file (%.2fs)\n\n", len(cueSheet.Tracks), stepDurations["parse"].Seconds())
 
-	// Step 2: Initialize content filter
-	fmt.Printf("Step 2: Initializing content filter...\n")
+	// Initialize content filter
 	stepStart = time.Now()
 	trackFilter, err := filter.NewFilter(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to initialize content filter: %w", err)
 	}
 	stepDurations["filter_init"] = time.Since(stepStart)
-	fmt.Printf("✓ Content filter initialized (%.2fs)\n\n", stepDurations["filter_init"].Seconds())
 
-	// Step 3: Filter tracks
-	fmt.Printf("Step 3: Filtering tracks...\n")
+	// Filter tracks
+	fmt.Printf("Filtering tracks...\n")
 	stepStart = time.Now()
 	var filteredTracks []cue.Track
 	originalCount := len(cueSheet.Tracks)
@@ -280,69 +313,56 @@ func executeWorkflow(cfg *config.Config, cueFilePath, showName string, dryRun bo
 	stepDurations["filter"] = time.Since(stepStart)
 	result.FilteredTracks = filteredCount
 	result.ExcludedTracks = excludedCount
-	fmt.Printf("✓ Filtered tracks: %d included, %d excluded (%.2fs)\n\n", filteredCount, excludedCount, stepDurations["filter"].Seconds())
 
 	if filteredCount == 0 {
 		return fmt.Errorf("no tracks remaining after filtering - check your filter configuration")
 	}
 
-	// Step 4: Format tracklist
-	fmt.Printf("Step 4: Formatting tracklist...\n")
+	// Format tracklist
 	stepStart = time.Now()
 	trackFormatter := formatter.NewFormatter()
 	formattedTracklist := trackFormatter.FormatTracklist(filteredTracks, trackFilter)
 	stepDurations["format"] = time.Since(stepStart)
 	result.FormattedLength = len(formattedTracklist)
-	fmt.Printf("✓ Tracklist formatted (%d characters, %.2fs)\n\n", len(formattedTracklist), stepDurations["format"].Seconds())
 
-	// Step 5: Initialize Mixcloud client
-	fmt.Printf("Step 5: Initializing Mixcloud client...\n")
+	// Initialize Mixcloud client
 	stepStart = time.Now()
-	mixcloudClient, err := mixcloud.NewClient(cfg, filepath.Clean(*configFile))
+	client, err := mixcloud.NewClient(cfg, filepath.Clean(*configFile))
 	if err != nil {
 		return fmt.Errorf("failed to initialize Mixcloud client: %w", err)
 	}
 	stepDurations["client_init"] = time.Since(stepStart)
-	fmt.Printf("✓ Mixcloud client initialized (%.2fs)\n\n", stepDurations["client_init"].Seconds())
 
-	// Step 6: Generate show URL and get show info
-	fmt.Printf("Step 6: Locating Mixcloud show...\n")
+	// Generate show URL and get show info
+	fmt.Printf("Locating Mixcloud show...\n")
 	stepStart = time.Now()
 	showURL := mixcloud.GenerateShowURL(cfg.Station.MixcloudUsername, showName)
 	result.ShowURL = showURL
-	fmt.Printf("Generated show URL: %s\n", showURL)
 
 	if !dryRun {
 		// Verify the show exists
-		show, err := mixcloudClient.GetShow(showURL)
+		_, err := client.GetShow(showURL)
 		if err != nil {
 			return fmt.Errorf("failed to get show information: %w", err)
 		}
-		stepDurations["show_lookup"] = time.Since(stepStart)
-		fmt.Printf("✓ Found show: %s (%.2fs)\n\n", show.Name, stepDurations["show_lookup"].Seconds())
-	} else {
-		stepDurations["show_lookup"] = time.Since(stepStart)
-		fmt.Printf("✓ Dry run mode - skipping show verification (%.2fs)\n\n", stepDurations["show_lookup"].Seconds())
 	}
+	stepDurations["show_lookup"] = time.Since(stepStart)
 
-	// Step 7: Update show description
-	fmt.Printf("Step 7: Updating show description...\n")
+	// Update show description
+	fmt.Printf("Updating show description...\n")
 	stepStart = time.Now()
 	if dryRun {
-		fmt.Printf("DRY RUN MODE - Would update show with:\n")
+		fmt.Printf("\nDRY RUN - Would update with:\n")
 		fmt.Printf("─────────────────────────────────────────\n")
 		fmt.Printf("%s\n", formattedTracklist)
 		fmt.Printf("─────────────────────────────────────────\n")
-		stepDurations["update"] = time.Since(stepStart)
-		fmt.Printf("✓ Dry run completed - no changes made (%.2fs)\n", stepDurations["update"].Seconds())
 	} else {
-		err := mixcloudClient.UpdateShowDescription(showURL, formattedTracklist)
+		err := client.UpdateShowDescription(showURL, formattedTracklist)
 		if err != nil {
 			return fmt.Errorf("failed to update show description: %w", err)
 		}
-		stepDurations["update"] = time.Since(stepStart)
-		fmt.Printf("✓ Show description updated successfully (%.2fs)\n", stepDurations["update"].Seconds())
 	}
+	stepDurations["update"] = time.Since(stepStart)
 
 	// Calculate total duration and mark as successful
 	result.TotalDuration = time.Since(startTime)
@@ -357,78 +377,23 @@ func executeWorkflow(cfg *config.Config, cueFilePath, showName string, dryRun bo
 // printWorkflowSummary displays a comprehensive summary of the workflow execution
 func printWorkflowSummary(result *WorkflowResult) {
 	fmt.Printf("\n")
-	fmt.Printf("═══════════════════════════════════════════\n")
-	fmt.Printf("             WORKFLOW SUMMARY              \n")
-	fmt.Printf("═══════════════════════════════════════════\n")
+	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	fmt.Printf("Summary: %d/%d tracks included (%.0f%%) • %.1fs\n", 
+		result.FilteredTracks, result.ParsedTracks,
+		float64(result.FilteredTracks) / float64(result.ParsedTracks) * 100,
+		result.TotalDuration.Seconds())
 	
-	// Execution status
-	status := "✓ SUCCESS"
-	if !result.Success {
-		status = "✗ FAILED"
-	}
-	fmt.Printf("Status: %s\n", status)
-	fmt.Printf("Mode: %s\n", func() string {
-		if result.DryRun {
-			return "DRY RUN (no changes made)"
-		}
-		return "LIVE UPDATE"
-	}())
-	
-	fmt.Printf("\n")
-	
-	// Track statistics
-	fmt.Printf("Track Processing:\n")
-	fmt.Printf("  • Parsed from CUE: %d tracks\n", result.ParsedTracks)
-	fmt.Printf("  • Included after filtering: %d tracks\n", result.FilteredTracks)
-	fmt.Printf("  • Excluded by filters: %d tracks\n", result.ExcludedTracks)
-	if result.ParsedTracks > 0 {
-		inclusion_rate := float64(result.FilteredTracks) / float64(result.ParsedTracks) * 100
-		fmt.Printf("  • Inclusion rate: %.1f%%\n", inclusion_rate)
-	}
-	
-	fmt.Printf("\n")
-	
-	// Output information
-	fmt.Printf("Output:\n")
-	fmt.Printf("  • Formatted tracklist: %d characters\n", result.FormattedLength)
 	if result.ShowURL != "" {
-		fmt.Printf("  • Target show URL: %s\n", result.ShowURL)
+		fmt.Printf("Show: %s\n", result.ShowURL)
 	}
-	
-	fmt.Printf("\n")
-	
-	// Performance timing
-	fmt.Printf("Performance Timing:\n")
-	fmt.Printf("  • Total execution time: %.2fs\n", result.TotalDuration.Seconds())
-	fmt.Printf("  • Breakdown by step:\n")
-	
-	stepNames := map[string]string{
-		"parse":       "CUE file parsing",
-		"filter_init": "Filter initialization",
-		"filter":      "Track filtering",
-		"format":      "Tracklist formatting",
-		"client_init": "Mixcloud client init",
-		"show_lookup": "Show verification",
-		"update":      "Description update",
-	}
-	
-	for step, duration := range result.StepDurations {
-		if name, exists := stepNames[step]; exists {
-			percentage := duration.Seconds() / result.TotalDuration.Seconds() * 100
-			fmt.Printf("    - %s: %.2fs (%.1f%%)\n", name, duration.Seconds(), percentage)
-		}
-	}
-	
-	fmt.Printf("\n")
 	
 	// Final message
 	if result.DryRun {
-		fmt.Printf("💡 This was a dry run. To apply changes, run again without --dry-run\n")
+		fmt.Printf("\nDry run complete. To apply changes, run again without --dry-run\n")
 	} else if result.Success {
-		fmt.Printf("🎉 Show description successfully updated on Mixcloud!\n")
+		fmt.Printf("\n✓ Show description updated on Mixcloud!\n")
 	}
-	
-	fmt.Printf("═══════════════════════════════════════════\n")
+	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 }
 
 func main() {
@@ -467,14 +432,21 @@ func main() {
 	fmt.Printf("Loading configuration...\n")
 	cfg, err := loadConfiguration(*configFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("Configuration loaded successfully.\n\n")
+	fmt.Printf("Configuration loaded.\n\n")
 
 	// Execute the main workflow
 	if err := executeWorkflow(cfg, *cueFile, *showName, *dryRun); err != nil {
-		fmt.Fprintf(os.Stderr, "Workflow execution failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		
+		// Check if this is an authentication error
+		errStr := err.Error()
+		if strings.Contains(errStr, "authentication") || strings.Contains(errStr, "unauthorized") || 
+		   strings.Contains(errStr, "token has expired") || strings.Contains(errStr, "OAuthException") {
+			fmt.Fprintf(os.Stderr, "\nYour OAuth tokens have expired. Please run the command again to re-authenticate.\n")
+		}
 		os.Exit(1)
 	}
 

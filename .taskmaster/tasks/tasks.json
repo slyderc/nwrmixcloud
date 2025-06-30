@@ -677,11 +677,305 @@
             "testStrategy": "Test with missing config, invalid inputs, and API failures to verify all error paths produce clear, contextual log messages"
           }
         ]
+      },
+      {
+        "id": 11,
+        "title": "Implement Templating System for Customizable Tracklist Output",
+        "description": "Create a flexible templating system using Go's text/template package that allows users to define custom tracklist output formats in the config file, supporting headers, footers, and multiple named templates for different use cases",
+        "details": "Extend the formatter package to support Go's text/template syntax:\n\n```go\ntype TemplateFormatter struct {\n    templates map[string]*template.Template\n    fallback  *Formatter // existing formatter for backward compatibility\n}\n\ntype TemplateData struct {\n    ShowTitle    string\n    ShowDate     string\n    TrackCount   int\n    Tracks       []FormattedTrack\n    StationName  string\n    Custom       map[string]interface{} // user-defined variables\n}\n\ntype FormattedTrack struct {\n    Index     int\n    StartTime string\n    Artist    string\n    Title     string\n    Genre     string\n    Duration  string // if available\n}\n```\n\nAdd template configuration to config.toml:\n```toml\n[templates]\ndefault = \"classic\" # fallback to hardcoded format\n\n[templates.minimal]\nheader = \"Tracklist:\\n\"\ntrack = \"{{.StartTime}} - {{.Title}} by {{.Artist}}\\n\"\nfooter = \"\\nTotal tracks: {{.TrackCount}}\"\n\n[templates.detailed]\nheader = \"{{.ShowTitle}} - {{.ShowDate}}\\n{{repeat \"-\" 50}}\\n\"\ntrack = \"{{printf \"%02d\" .Index}}. [{{.StartTime}}] {{.Artist}} - {{.Title}}{{if .Genre}} ({{.Genre}}){{end}}\\n\"\nfooter = \"\\n{{repeat \"-\" 50}}\\nBroadcast by {{.StationName}} | {{.TrackCount}} tracks played\"\n\n[templates.markdown]\nheader = \"## {{.ShowTitle}}\\n### {{.ShowDate}}\\n\\n\"\ntrack = \"- **{{.StartTime}}** - *{{.Title}}* by {{.Artist}}\\n\"\nfooter = \"\\n---\\n*Generated automatically from CUE sheet*\"\n```\n\nImplement template functions:\n```go\nfunc (tf *TemplateFormatter) LoadTemplates(config *config.Config) error {\n    // Parse template definitions from config\n    // Register custom template functions:\n    funcMap := template.FuncMap{\n        \"repeat\": strings.Repeat,\n        \"upper\":  strings.ToUpper,\n        \"lower\":  strings.ToLower,\n        \"truncate\": func(s string, n int) string {\n            if len(s) <= n {\n                return s\n            }\n            return s[:n] + \"...\"\n        },\n    }\n}\n\nfunc (tf *TemplateFormatter) FormatWithTemplate(name string, tracks []cue.Track, filter *filter.Filter, metadata map[string]interface{}) (string, error) {\n    // Select template by name\n    // Build TemplateData struct\n    // Execute header, tracks, footer templates\n    // Respect 1000 character limit with smart truncation\n}\n```\n\nUpdate CLI to support template selection:\n```go\ntemplateName := flag.String(\"template\", \"default\", \"Template name to use for formatting\")\n```\n\nEnsure backward compatibility:\n- If no templates defined in config, use existing hardcoded format\n- If template parsing fails, fall back to classic formatter\n- Maintain the same FormatTracklist() interface for existing code",
+        "testStrategy": "Create comprehensive test suite for template functionality:\n1. Test template parsing from various config formats\n2. Verify all built-in template functions work correctly (repeat, truncate, etc.)\n3. Test with missing template sections (header/footer optional)\n4. Validate character limit enforcement with templates\n5. Test backward compatibility when no templates defined\n6. Create edge case templates with complex conditionals and loops\n7. Verify template errors are handled gracefully with fallback\n8. Test custom template variables passed through metadata\n9. Validate template output matches expected format for each preset\n10. Performance test template rendering with large track lists",
+        "status": "pending",
+        "dependencies": [
+          2,
+          8
+        ],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Add Template Configuration Schema to Config System",
+            "description": "Extend the existing config package to support template definitions in config.toml, including parsing template sections with header, track, and footer fields",
+            "dependencies": [],
+            "details": "Update internal/config/config.go to add TemplateConfig struct and Templates map[string]TemplateConfig. Add fields for header, track, footer strings and default template name. Implement TOML unmarshaling for the new [templates] section structure",
+            "status": "pending",
+            "testStrategy": "Create unit tests with sample TOML configurations containing various template definitions. Test parsing of nested template sections, missing fields, and invalid configurations"
+          },
+          {
+            "id": 2,
+            "title": "Create Template Engine Module with Core Functionality",
+            "description": "Implement a new template engine that uses Go's text/template package to process tracklist formatting with custom functions and data structures",
+            "dependencies": [
+              1
+            ],
+            "details": "Create internal/template/engine.go with TemplateFormatter struct containing templates map and fallback formatter. Implement LoadTemplates() to parse template strings from config and register custom functions (repeat, upper, lower, truncate). Define TemplateData and FormattedTrack structs for template execution",
+            "status": "pending",
+            "testStrategy": "Unit test template parsing, function registration, and execution with mock data. Test custom template functions independently and verify error handling for malformed templates"
+          },
+          {
+            "id": 3,
+            "title": "Implement Template-Based Formatting with Smart Truncation",
+            "description": "Create FormatWithTemplate method that executes templates with track data while respecting Mixcloud's 1000 character limit",
+            "dependencies": [
+              2
+            ],
+            "details": "Implement FormatWithTemplate() method that builds TemplateData from tracks and metadata, executes header/track/footer templates separately, and applies smart truncation at line boundaries when approaching character limit. Handle template execution errors gracefully",
+            "status": "pending",
+            "testStrategy": "Test formatting with various track counts and template styles. Verify character limit enforcement, smart truncation behavior, and proper handling of missing template fields"
+          },
+          {
+            "id": 4,
+            "title": "Integrate Template Engine with Existing Formatter Package",
+            "description": "Modify the formatter package to support both legacy hardcoded format and new template-based formatting with seamless fallback",
+            "dependencies": [
+              3
+            ],
+            "details": "Update internal/formatter/formatter.go to detect template configuration and delegate to TemplateFormatter when templates are defined. Maintain FormatTracklist() interface for backward compatibility. Implement fallback logic when template parsing fails or no templates configured",
+            "status": "pending",
+            "testStrategy": "Integration tests verifying both legacy and template-based formatting work correctly. Test fallback scenarios when templates are unavailable or malformed"
+          },
+          {
+            "id": 5,
+            "title": "Add CLI Flag for Template Selection",
+            "description": "Extend the command-line interface to accept a template name parameter for selecting which template to use during formatting",
+            "dependencies": [
+              4
+            ],
+            "details": "Update cmd/mixcloud-updater/main.go to add -template flag with default value 'default'. Pass template name through to formatter. Update help text to describe template usage. Handle invalid template names gracefully with informative error messages",
+            "status": "pending",
+            "testStrategy": "Test CLI with various template names including default, custom, and invalid names. Verify proper error messages and fallback behavior"
+          },
+          {
+            "id": 6,
+            "title": "Implement Template Validation and Error Handling",
+            "description": "Add comprehensive validation for template definitions to catch errors early and provide helpful feedback to users",
+            "dependencies": [
+              2
+            ],
+            "details": "Create ValidateTemplate() method to check template syntax during loading. Validate required template variables are available in TemplateData. Implement detailed error messages indicating which template and line has issues. Add template listing functionality to show available templates",
+            "status": "pending",
+            "testStrategy": "Test validation with malformed templates, missing variables, and syntax errors. Verify error messages are clear and actionable"
+          },
+          {
+            "id": 7,
+            "title": "Add Comprehensive Tests and Update Documentation",
+            "description": "Create thorough test coverage for the templating system and update all relevant documentation including README and CLAUDE.md",
+            "dependencies": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "details": "Write table-driven tests for each template component. Add example templates to config.toml.example. Update README with template usage examples and available functions. Document template data structure in CLAUDE.md. Create integration tests with real CUE files using different templates",
+            "status": "pending",
+            "testStrategy": "Ensure 80%+ test coverage for new template code. Test edge cases like empty tracks, very long outputs, and Unicode handling. Verify documentation examples work as shown"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Implement unified config-driven architecture for single-command operation",
+        "description": "Transform the application into a single-command tool that processes all configured shows based on a comprehensive config file, incorporating smart show detection, templating, and automatic multi-show processing",
+        "details": "Restructure the application to support a unified config-driven workflow:\n\n```go\n// Enhanced config structure in internal/config/config.go\ntype Config struct {\n    // Existing sections remain...\n    \n    Shows map[string]ShowConfig `toml:\"shows\"`\n    \n    Processing struct {\n        CueFileDirectory string `toml:\"cue_file_directory\"`\n        AutoProcess      bool   `toml:\"auto_process\"`\n        BatchSize        int    `toml:\"batch_size\"`\n    } `toml:\"processing\"`\n}\n\ntype ShowConfig struct {\n    // CUE file mapping\n    CueFilePattern   string `toml:\"cue_file_pattern\"` // e.g., \"MYR*.cue\"\n    CueFileMapping   string `toml:\"cue_file_mapping\"` // e.g., \"latest.cue\" or specific file\n    \n    // Show identification\n    ShowNamePattern  string `toml:\"show_name_pattern\"` // e.g., \"Sounds Like - {date}\"\n    Aliases          []string `toml:\"aliases\"` // e.g., [\"sounds-like\", \"sl\"]\n    \n    // Template overrides\n    TemplateName     string `toml:\"template\"` // Reference to templates section\n    CustomTemplate   string `toml:\"custom_template\"` // Inline template override\n    \n    // Date/time handling\n    DateExtraction   string `toml:\"date_extraction\"` // Regex to extract date from filename\n    DateFormat       string `toml:\"date_format\"` // Format for show title generation\n    \n    // Processing options\n    Enabled          bool   `toml:\"enabled\"`\n    Priority         int    `toml:\"priority\"`\n}\n```\n\nImplement new command structure in cmd/mixcloud-updater/main.go:\n\n```go\nfunc main() {\n    // Simplified CLI - config file is the only required argument\n    configFile := flag.String(\"config\", \"config.toml\", \"Configuration file\")\n    showAlias := flag.String(\"show\", \"\", \"Process specific show by name/alias\")\n    dryRun := flag.Bool(\"dry-run\", false, \"Preview without updating\")\n    flag.Parse()\n    \n    // Support single argument mode: ./mixcloud-updater config.toml\n    if flag.NArg() == 1 && *configFile == \"config.toml\" {\n        *configFile = flag.Arg(0)\n    }\n    \n    cfg, err := config.Load(*configFile)\n    if err != nil {\n        log.Fatalf(\"Failed to load config: %v\", err)\n    }\n    \n    processor := NewShowProcessor(cfg)\n    \n    if *showAlias != \"\" {\n        // Process single show by alias\n        if err := processor.ProcessShow(*showAlias, *dryRun); err != nil {\n            log.Fatalf(\"Failed to process show: %v\", err)\n        }\n    } else {\n        // Process all enabled shows\n        if err := processor.ProcessAllShows(*dryRun); err != nil {\n            log.Fatalf(\"Failed to process shows: %v\", err)\n        }\n    }\n}\n```\n\nCreate ShowProcessor to handle the new workflow:\n\n```go\ntype ShowProcessor struct {\n    config      *config.Config\n    mixcloud    *mixcloud.Client\n    formatter   *formatter.TemplateFormatter\n    filter      *filter.Filter\n}\n\nfunc (p *ShowProcessor) ProcessShow(nameOrAlias string, dryRun bool) error {\n    // Find show config by name or alias\n    showCfg := p.findShowConfig(nameOrAlias)\n    if showCfg == nil {\n        return fmt.Errorf(\"show not found: %s\", nameOrAlias)\n    }\n    \n    // Determine CUE file to process\n    cueFile, err := p.resolveCueFile(showCfg)\n    if err != nil {\n        return fmt.Errorf(\"resolving CUE file: %w\", err)\n    }\n    \n    // Parse CUE file\n    cueSheet, err := cue.ParseCueFile(cueFile)\n    if err != nil {\n        return fmt.Errorf(\"parsing CUE file: %w\", err)\n    }\n    \n    // Generate show name with date substitution\n    showName := p.generateShowName(showCfg, cueFile)\n    \n    // Format tracklist using show-specific template\n    template := p.selectTemplate(showCfg)\n    tracklist := p.formatter.Format(cueSheet.Tracks, template, showName)\n    \n    if dryRun {\n        fmt.Printf(\"Would update: %s\\n%s\\n\", showName, tracklist)\n        return nil\n    }\n    \n    // Update Mixcloud\n    return p.mixcloud.UpdateShowDescription(showName, tracklist)\n}\n\nfunc (p *ShowProcessor) resolveCueFile(cfg *ShowConfig) (string, error) {\n    if cfg.CueFileMapping != \"\" {\n        // Direct file mapping\n        path := filepath.Join(p.config.Processing.CueFileDirectory, cfg.CueFileMapping)\n        if _, err := os.Stat(path); err != nil {\n            return \"\", err\n        }\n        return path, nil\n    }\n    \n    if cfg.CueFilePattern != \"\" {\n        // Pattern-based matching (find latest)\n        pattern := filepath.Join(p.config.Processing.CueFileDirectory, cfg.CueFilePattern)\n        matches, err := filepath.Glob(pattern)\n        if err != nil {\n            return \"\", err\n        }\n        if len(matches) == 0 {\n            return \"\", fmt.Errorf(\"no files match pattern: %s\", pattern)\n        }\n        // Return most recent file\n        return findLatestFile(matches), nil\n    }\n    \n    return \"\", fmt.Errorf(\"no CUE file mapping configured\")\n}\n\nfunc (p *ShowProcessor) generateShowName(cfg *ShowConfig, cueFile string) string {\n    showName := cfg.ShowNamePattern\n    \n    // Extract date from filename if configured\n    if cfg.DateExtraction != \"\" {\n        re := regexp.MustCompile(cfg.DateExtraction)\n        if matches := re.FindStringSubmatch(filepath.Base(cueFile)); len(matches) > 1 {\n            date := matches[1]\n            // Format date if needed\n            if cfg.DateFormat != \"\" {\n                date = formatDate(date, cfg.DateFormat)\n            }\n            showName = strings.Replace(showName, \"{date}\", date, -1)\n        }\n    }\n    \n    // Replace other placeholders\n    showName = strings.Replace(showName, \"{station}\", p.config.Station.Name, -1)\n    \n    return showName\n}\n```\n\nExample comprehensive config.toml:\n\n```toml\n[station]\nname = \"Example FM\"\nmixcloud_username = \"examplefm\"\n\n[oauth]\nclient_id = \"...\"\nclient_secret = \"...\"\n# Tokens auto-managed\n\n[processing]\ncue_file_directory = \"/radio/playout/logs\"\nauto_process = true\nbatch_size = 5\n\n# Template definitions\n[templates.default]\nheader = \"Today's tracklist:\"\ntrack_format = \"{{.Time}} - {{.Title}} by {{.Artist}}\"\nfooter = \"Thanks for listening!\"\n\n[templates.detailed]\nheader = \"=== {{.ShowTitle}} ===\\nAired: {{.ShowDate}}\\n\\nTracklist:\"\ntrack_format = \"[{{.Index}}] {{.Time}} - \\\"{{.Title}}\\\" by {{.Artist}}\"\nfooter = \"\\nTotal tracks: {{.TrackCount}}\"\n\n# Show configurations\n[shows.newer-new-wave]\ncue_file_pattern = \"MYR4*.cue\"\nshow_name_pattern = \"The Newer New Wave Show - {date}\"\naliases = [\"nnw\", \"new-wave\"]\ntemplate = \"default\"\ndate_extraction = \"MYR4(\\\\d{4})\"\ndate_format = \"01/02/2006\"\nenabled = true\npriority = 1\n\n[shows.sounds-like]\ncue_file_mapping = \"latest-sounds-like.cue\"\nshow_name_pattern = \"Sounds Like - Jeri-Rig & V-Dub - {date}\"\naliases = [\"sl\", \"sounds\"]\ntemplate = \"detailed\"\ndate_extraction = \"(\\\\d{2}-\\\\d{2}-\\\\d{4})\"\nenabled = true\npriority = 2\n\n[shows.morning-show]\ncue_file_pattern = \"morning-*.cue\"\nshow_name_pattern = \"Morning Drive - {date}\"\naliases = [\"morning\", \"am\"]\n# Inline custom template\ncustom_template = \"\"\"Morning Show Playlist:\n{{range .Tracks}}{{.Time}} {{.Title}}{{end}}\"\"\"\nenabled = true\n```\n\nUsage examples:\n```bash\n# Process all enabled shows\n./mixcloud-updater config.toml\n\n# Process specific show by alias\n./mixcloud-updater config.toml -show nnw\n./mixcloud-updater config.toml -show sounds-like\n\n# Dry run to preview\n./mixcloud-updater config.toml -dry-run\n\n# Using show alias shortcuts\n./mixcloud-updater config.toml -show morning\n```",
+        "testStrategy": "Comprehensive testing strategy for unified config architecture:\n\n1. **Config Loading Tests:**\n   - Test loading complex config with multiple shows\n   - Verify show alias resolution works correctly\n   - Test template inheritance and overrides\n   - Validate config with missing sections\n\n2. **CUE File Resolution Tests:**\n   - Test pattern matching with glob patterns\n   - Verify direct file mapping works\n   - Test latest file selection from multiple matches\n   - Validate error handling for missing files\n\n3. **Show Name Generation Tests:**\n   - Test date extraction from various filename formats\n   - Verify date formatting with different patterns\n   - Test placeholder substitution ({date}, {station})\n   - Validate show name generation without date\n\n4. **Multi-Show Processing Tests:**\n   - Test processing all enabled shows in priority order\n   - Verify disabled shows are skipped\n   - Test batch processing with size limits\n   - Validate error handling continues to next show\n\n5. **Template Selection Tests:**\n   - Test show-specific template selection\n   - Verify inline custom templates work\n   - Test fallback to default template\n   - Validate template data population\n\n6. **CLI Behavior Tests:**\n   - Test single argument mode (./mixcloud-updater config.toml)\n   - Verify show alias resolution in CLI\n   - Test dry-run mode prevents API calls\n   - Validate error messages for invalid shows\n\n7. **Integration Tests:**\n   - Create test config with 3+ show definitions\n   - Place test CUE files matching patterns\n   - Run full workflow and verify correct processing\n   - Test with real Mixcloud API in dry-run mode",
+        "status": "pending",
+        "dependencies": [
+          2,
+          5,
+          6,
+          7,
+          8,
+          9,
+          11
+        ],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Extend config schema to support shows, templates, and processing options",
+            "description": "Update the config structure to include new sections for show configurations, template definitions, and processing settings while maintaining backward compatibility",
+            "dependencies": [],
+            "details": "Modify internal/config/config.go to add ShowConfig struct with fields for cue_file_pattern, cue_file_mapping, show_name_pattern, aliases, template references, date handling, and processing options. Add Processing struct for batch settings and cue_file_directory. Add Templates map[string]TemplateConfig for template definitions. Update Load() function to properly unmarshal these new sections from TOML. Ensure existing config fields remain functional.",
+            "status": "pending",
+            "testStrategy": "Create unit tests with sample TOML configs testing various show configurations, template definitions, and processing options. Test backward compatibility with existing configs."
+          },
+          {
+            "id": 2,
+            "title": "Implement show alias resolution and lookup system",
+            "description": "Create a system to resolve show names and aliases to their corresponding configurations, supporting both primary names and multiple aliases per show",
+            "dependencies": [
+              1
+            ],
+            "details": "Create internal/shows/resolver.go with ShowResolver struct containing methods like FindShowConfig(nameOrAlias string) *config.ShowConfig. Build alias map during initialization by iterating through all show configs and indexing by both show key and aliases. Implement case-insensitive matching and handle conflicts. Add validation to ensure unique aliases across all shows.",
+            "status": "pending",
+            "testStrategy": "Test alias resolution with various inputs including exact matches, case variations, conflicts, and non-existent aliases. Verify primary name and alias lookups work correctly."
+          },
+          {
+            "id": 3,
+            "title": "Create CUE file detection and pattern matching logic",
+            "description": "Implement logic to resolve CUE files based on patterns, direct mappings, and date-based selection including finding the most recent file",
+            "dependencies": [
+              1
+            ],
+            "details": "Create internal/shows/cue_resolver.go with methods ResolveCueFile(showCfg *config.ShowConfig, baseDir string) (string, error) and findLatestFile(files []string) string. Support direct file mapping (cue_file_mapping), glob pattern matching (cue_file_pattern), and intelligent latest file selection based on modification time or filename parsing. Handle missing files gracefully with clear error messages.",
+            "status": "pending",
+            "testStrategy": "Mock filesystem operations to test pattern matching, latest file selection, and error cases. Test with various file patterns and directory structures."
+          },
+          {
+            "id": 4,
+            "title": "Integrate templating system with per-show template selection",
+            "description": "Extend the formatter to support template definitions and enable per-show template selection with variable substitution",
+            "dependencies": [
+              1
+            ],
+            "details": "Enhance internal/formatter/formatter.go to add TemplateFormatter struct supporting Go text/template syntax. Implement SelectTemplate(showCfg *config.ShowConfig) *template.Template that chooses between referenced templates, custom inline templates, or defaults. Support variables like {{.Time}}, {{.Title}}, {{.Artist}}, {{.ShowTitle}}, {{.ShowDate}}, {{.TrackCount}}. Add template caching for performance.",
+            "status": "pending",
+            "testStrategy": "Test template rendering with various formats, variable substitutions, and edge cases like missing fields. Verify template selection logic and custom template overrides."
+          },
+          {
+            "id": 5,
+            "title": "Refactor CLI to single-command interface with optional show selection",
+            "description": "Transform the command-line interface to use config file as primary argument with optional show-specific processing",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Rewrite cmd/mixcloud-updater/main.go to support './mixcloud-updater config.toml' as primary usage. Add -show flag for specific show processing by name/alias. Implement single positional argument support for config file. Remove old -cue-file and -show-name flags. Add better help text explaining the new usage patterns. Maintain -dry-run and other utility flags.",
+            "status": "pending",
+            "testStrategy": "Test CLI argument parsing with various combinations: no args, config only, config with show alias, dry-run mode. Verify error handling for missing configs."
+          },
+          {
+            "id": 6,
+            "title": "Build ShowProcessor for batch and individual show processing",
+            "description": "Create the core processor that handles both single show and batch processing with proper orchestration and error handling",
+            "dependencies": [
+              2,
+              3,
+              4,
+              5
+            ],
+            "details": "Implement internal/processor/show_processor.go with ShowProcessor struct containing ProcessShow(nameOrAlias string, dryRun bool) error and ProcessAllShows(dryRun bool) error methods. Include show name generation with date substitution, template selection, CUE file resolution, and Mixcloud API integration. Implement priority-based processing order for batch operations. Add progress reporting for batch processing.",
+            "status": "pending",
+            "testStrategy": "Mock all dependencies (CUE parser, Mixcloud client, formatter) to test processing logic. Test both single show and batch processing scenarios with various configurations."
+          },
+          {
+            "id": 7,
+            "title": "Add comprehensive error handling, logging, and batch reporting",
+            "description": "Implement robust error handling for all failure scenarios with detailed logging and batch processing reports",
+            "dependencies": [
+              6
+            ],
+            "details": "Add structured logging using log/slog or similar. Implement error aggregation for batch processing to continue on individual failures. Create ProcessingReport struct to track successes, failures, and skipped shows. Add detailed error context including which show failed, why, and recovery suggestions. Implement retry logic for transient failures. Output summary report after batch processing.",
+            "status": "pending",
+            "testStrategy": "Test error scenarios including missing CUE files, API failures, template errors, and config issues. Verify batch processing continues on individual failures and produces accurate reports."
+          },
+          {
+            "id": 8,
+            "title": "Create comprehensive tests and update documentation",
+            "description": "Write unit tests for all new components, integration tests for the full workflow, and update all documentation to reflect the new architecture",
+            "dependencies": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7
+            ],
+            "details": "Create unit tests for config loading, alias resolution, CUE file detection, template rendering, and show processing. Write integration tests simulating full workflows with sample configs and CUE files. Update README.md with new usage examples, configuration guide, and migration instructions. Update CLAUDE.md with new architecture details. Create example config.toml with multiple show configurations as reference.",
+            "status": "pending",
+            "testStrategy": "Achieve >80% test coverage for new code. Include table-driven tests for various scenarios. Create end-to-end tests with real config files and mock Mixcloud responses."
+          }
+        ]
+      },
+      {
+        "id": 13,
+        "title": "Implement enhanced configuration validator with startup validation and --validate-only mode",
+        "description": "Create a comprehensive configuration validation system that automatically runs on startup to validate show configurations, template syntax, file paths, and OAuth settings, categorizing issues as critical errors or warnings",
+        "details": "Implement a validation package in internal/validator/:\n\n```go\ntype Validator struct {\n    config *config.Config\n    errors []ValidationIssue\n    warnings []ValidationIssue\n}\n\ntype ValidationIssue struct {\n    Category string  // \"config\", \"oauth\", \"template\", \"filesystem\"\n    Field    string  // specific config field\n    Message  string  // user-friendly error message\n    Suggestion string // actionable fix suggestion\n    Critical bool    // true = blocks execution\n}\n\nfunc NewValidator(cfg *config.Config) *Validator {\n    return &Validator{config: cfg}\n}\n\nfunc (v *Validator) Validate() error {\n    v.validateOAuthSettings()\n    v.validateShowConfigurations()\n    v.validateTemplates()\n    v.validateFilePaths()\n    v.validateFilteringRules()\n    \n    if len(v.errors) > 0 {\n        return v.formatValidationReport()\n    }\n    return nil\n}\n\nfunc (v *Validator) validateOAuthSettings() {\n    if v.config.OAuth.ClientID == \"\" {\n        v.addError(\"oauth\", \"client_id\", \"OAuth client ID is missing\", \"Add 'client_id' to [oauth] section\")\n    }\n    if v.config.OAuth.ClientSecret == \"\" {\n        v.addError(\"oauth\", \"client_secret\", \"OAuth client secret is missing\", \"Add 'client_secret' to [oauth] section\")\n    }\n    // Test token validity if present\n    if v.config.OAuth.AccessToken != \"\" {\n        if err := v.testTokenValidity(); err != nil {\n            v.addWarning(\"oauth\", \"access_token\", \"Access token may be expired\", \"Run with --dry-run to refresh token\")\n        }\n    }\n}\n\nfunc (v *Validator) validateShowConfigurations() {\n    for name, show := range v.config.Shows {\n        // Validate show URLs\n        if show.MixcloudURL != \"\" {\n            if !isValidMixcloudURL(show.MixcloudURL) {\n                v.addError(\"shows\", name+\".mixcloud_url\", \"Invalid Mixcloud URL format\", \"Use format: https://www.mixcloud.com/username/show-slug/\")\n            }\n        }\n        \n        // Validate CUE file patterns\n        if show.CueFilePattern != \"\" {\n            if _, err := regexp.Compile(show.CueFilePattern); err != nil {\n                v.addError(\"shows\", name+\".cue_file_pattern\", \"Invalid regex pattern\", \"Check regex syntax: \"+err.Error())\n            }\n        }\n        \n        // Validate template references\n        if show.Template != \"\" && v.config.Templates[show.Template] == nil {\n            v.addError(\"shows\", name+\".template\", fmt.Sprintf(\"Template '%s' not found\", show.Template), \"Define template in [templates] section or use 'default'\")\n        }\n    }\n}\n\nfunc (v *Validator) validateTemplates() {\n    for name, tmpl := range v.config.Templates {\n        // Parse and validate Go template syntax\n        t := template.New(name)\n        if tmpl.Header != \"\" {\n            if _, err := t.Parse(tmpl.Header); err != nil {\n                v.addError(\"templates\", name+\".header\", \"Invalid template syntax in header\", \"Fix syntax error: \"+err.Error())\n            }\n        }\n        if tmpl.TrackLine != \"\" {\n            if _, err := t.Parse(tmpl.TrackLine); err != nil {\n                v.addError(\"templates\", name+\".track_line\", \"Invalid template syntax in track_line\", \"Fix syntax error: \"+err.Error())\n            }\n        }\n        if tmpl.Footer != \"\" {\n            if _, err := t.Parse(tmpl.Footer); err != nil {\n                v.addError(\"templates\", name+\".footer\", \"Invalid template syntax in footer\", \"Fix syntax error: \"+err.Error())\n            }\n        }\n    }\n}\n\nfunc (v *Validator) validateFilePaths() {\n    // Check CUE file directory\n    if v.config.Processing.CueFileDirectory != \"\" {\n        if _, err := os.Stat(v.config.Processing.CueFileDirectory); os.IsNotExist(err) {\n            v.addError(\"processing\", \"cue_file_directory\", \"CUE file directory does not exist\", \"Create directory or fix path: \"+v.config.Processing.CueFileDirectory)\n        }\n    }\n    \n    // Check for any hardcoded paths in show configs\n    for name, show := range v.config.Shows {\n        if show.CueFilePath != \"\" {\n            if _, err := os.Stat(show.CueFilePath); os.IsNotExist(err) {\n                v.addWarning(\"shows\", name+\".cue_file_path\", \"Specified CUE file not found\", \"File will be skipped: \"+show.CueFilePath)\n            }\n        }\n    }\n}\n\nfunc (v *Validator) validateFilteringRules() {\n    // Compile and test regex patterns\n    for i, pattern := range v.config.Filtering.ExcludedArtistPatterns {\n        if _, err := regexp.Compile(pattern); err != nil {\n            v.addError(\"filtering\", fmt.Sprintf(\"excluded_artist_patterns[%d]\", i), \"Invalid regex pattern\", \"Fix pattern syntax: \"+err.Error())\n        }\n    }\n    for i, pattern := range v.config.Filtering.ExcludedTitlePatterns {\n        if _, err := regexp.Compile(pattern); err != nil {\n            v.addError(\"filtering\", fmt.Sprintf(\"excluded_title_patterns[%d]\", i), \"Invalid regex pattern\", \"Fix pattern syntax: \"+err.Error())\n        }\n    }\n}\n```\n\nIntegrate with main.go:\n\n```go\nfunc main() {\n    validateOnly := flag.Bool(\"validate-only\", false, \"Validate configuration without processing\")\n    flag.Parse()\n    \n    // Load config\n    cfg, err := config.Load(*configFile)\n    if err != nil {\n        log.Fatal(\"Failed to load config: \", err)\n    }\n    \n    // Always validate on startup\n    validator := validator.NewValidator(cfg)\n    if err := validator.Validate(); err != nil {\n        fmt.Fprintf(os.Stderr, \"%s\\n\", err)\n        if validator.HasCriticalErrors() {\n            os.Exit(1)\n        }\n        // Continue with warnings\n        fmt.Fprintln(os.Stderr, \"Continuing with warnings...\")\n    }\n    \n    if *validateOnly {\n        if validator.HasIssues() {\n            fmt.Println(\"Configuration has issues (see above)\")\n            os.Exit(1)\n        }\n        fmt.Println(\"Configuration is valid!\")\n        os.Exit(0)\n    }\n    \n    // Continue with normal processing...\n}\n```\n\nFormat validation output with color coding:\n\n```go\nfunc (v *Validator) formatValidationReport() error {\n    var report strings.Builder\n    \n    if len(v.errors) > 0 {\n        report.WriteString(\"\\n🚫 CRITICAL ERRORS (must fix):\\n\")\n        for _, err := range v.errors {\n            report.WriteString(fmt.Sprintf(\"  ❌ [%s] %s: %s\\n\", err.Category, err.Field, err.Message))\n            if err.Suggestion != \"\" {\n                report.WriteString(fmt.Sprintf(\"     💡 %s\\n\", err.Suggestion))\n            }\n        }\n    }\n    \n    if len(v.warnings) > 0 {\n        report.WriteString(\"\\n⚠️  WARNINGS (optional fixes):\\n\")\n        for _, warn := range v.warnings {\n            report.WriteString(fmt.Sprintf(\"  ⚠️  [%s] %s: %s\\n\", warn.Category, warn.Field, warn.Message))\n            if warn.Suggestion != \"\" {\n                report.WriteString(fmt.Sprintf(\"     💡 %s\\n\", warn.Suggestion))\n            }\n        }\n    }\n    \n    return fmt.Errorf(report.String())\n}\n```",
+        "testStrategy": "Create comprehensive test suite for validator:\n\n1. **Critical Error Tests:**\n   - Test with missing OAuth credentials\n   - Test with invalid Mixcloud URLs\n   - Test with non-existent file paths\n   - Test with malformed regex patterns\n   - Verify execution is blocked for critical errors\n\n2. **Warning Tests:**\n   - Test with expired OAuth tokens\n   - Test with missing optional CUE files\n   - Test with deprecated config options\n   - Verify execution continues with warnings\n\n3. **Template Validation Tests:**\n   - Test with invalid Go template syntax\n   - Test with undefined template variables\n   - Test with circular template references\n   - Verify clear error messages for template issues\n\n4. **--validate-only Mode Tests:**\n   - Test that no processing occurs in validate-only mode\n   - Test exit codes (0 for valid, 1 for issues)\n   - Test output formatting for different issue types\n   - Verify all config sections are validated\n\n5. **Integration Tests:**\n   - Test with real config files from examples\n   - Test with progressively complex configurations\n   - Test error message clarity and suggestions\n   - Verify startup validation doesn't impact performance",
+        "status": "pending",
+        "dependencies": [
+          2,
+          11,
+          12
+        ],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create validation framework with error types and reporting structures",
+            "description": "Set up the core validation package structure with ValidationIssue types, Validator struct, and error/warning collection mechanisms",
+            "dependencies": [],
+            "details": "Create internal/validator/validator.go with Validator struct containing config reference and issue slices. Define ValidationIssue struct with Category, Field, Message, Suggestion, and Critical fields. Implement helper methods addError(), addWarning(), HasCriticalErrors(), HasIssues(), and formatValidationReport() with color-coded output formatting",
+            "status": "pending",
+            "testStrategy": "Unit test error/warning collection, verify formatValidationReport output formatting, test issue categorization logic"
+          },
+          {
+            "id": 2,
+            "title": "Implement basic configuration validation for OAuth and filesystem paths",
+            "description": "Build validation methods for OAuth settings, station configuration, and filesystem paths including directory existence checks",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement validateOAuthSettings() to check ClientID, ClientSecret, and optionally test token validity. Create validateFilePaths() to verify CueFileDirectory exists and check hardcoded CUE file paths in show configs. Add validateStationSettings() for basic station config validation. Use os.Stat for file system checks",
+            "status": "pending",
+            "testStrategy": "Mock filesystem for path validation tests, test OAuth validation with missing/invalid credentials, verify appropriate error/warning categorization"
+          },
+          {
+            "id": 3,
+            "title": "Build show configuration validation with Mixcloud URL and CUE pattern checks",
+            "description": "Implement comprehensive validation for show configurations including URL format validation, regex pattern compilation, and template reference checks",
+            "dependencies": [
+              1
+            ],
+            "details": "Create validateShowConfigurations() iterating through all show configs. Implement isValidMixcloudURL() helper to verify URL format matches https://www.mixcloud.com/username/show-slug/. Compile and validate CueFilePattern regex patterns. Check template references exist in config.Templates map. Generate specific error messages with field paths like 'shows.showname.mixcloud_url'",
+            "status": "pending",
+            "testStrategy": "Test with various valid/invalid Mixcloud URLs, malformed regex patterns, missing template references, verify error messages include correct field paths"
+          },
+          {
+            "id": 4,
+            "title": "Add template syntax validation for Go templates and filtering rules",
+            "description": "Validate Go template syntax in headers, track lines, and footers, plus validate regex patterns in filtering rules",
+            "dependencies": [
+              1
+            ],
+            "details": "Implement validateTemplates() using Go's text/template parser to validate Header, TrackLine, and Footer template syntax. Create validateFilteringRules() to compile and test all regex patterns in ExcludedArtistPatterns and ExcludedTitlePatterns arrays. Capture template parse errors and regex compile errors with helpful context",
+            "status": "pending",
+            "testStrategy": "Test with invalid Go template syntax, malformed regex patterns, verify error messages include specific syntax errors"
+          },
+          {
+            "id": 5,
+            "title": "Integrate validator into main application startup flow",
+            "description": "Modify main.go to instantiate validator on startup, run validation before processing, and handle critical errors vs warnings appropriately",
+            "dependencies": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "details": "Update main() to create validator.NewValidator(cfg) after config load. Call Validate() and check for errors. If HasCriticalErrors(), print report to stderr and exit(1). For warnings only, print to stderr with 'Continuing with warnings...' message. Ensure validation runs before any CUE file processing or API calls",
+            "status": "pending",
+            "testStrategy": "Integration test with configs containing critical errors, warnings only, and clean configs. Verify appropriate exit codes and stderr output"
+          },
+          {
+            "id": 6,
+            "title": "Implement validate-only CLI mode and comprehensive test suite",
+            "description": "Add --validate-only flag for configuration testing without processing, and create comprehensive unit and integration tests for all validation scenarios",
+            "dependencies": [
+              5
+            ],
+            "details": "Add validateOnly bool flag to CLI parsing. When set, run validation and exit with appropriate code (0 for valid, 1 for issues) with clear success/failure message. Create validator_test.go with table-driven tests covering all validation methods, edge cases, and error formatting. Test validate-only mode integration",
+            "status": "pending",
+            "testStrategy": "Test CLI with --validate-only flag, verify exit codes match validation results, test all validation categories with comprehensive test cases"
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-06-29T19:16:03.127Z",
-      "updated": "2025-06-29T22:21:15.804Z",
+      "updated": "2025-06-30T04:01:57.153Z",
       "description": "Tasks for master context"
     }
   }

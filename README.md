@@ -39,23 +39,22 @@ Automatically updates Mixcloud show descriptions with formatted tracklists from 
    # access_token and refresh_token will be auto-filled
    ```
 
-3. **First-time OAuth setup**:
-   ```bash
-   # Test with dry run first
-   ./mixcloud-updater -cue-file sample.cue -show-name "Test Show" -dry-run
-   ```
-   Follow the OAuth prompts to authorize the application.
+3. **First run**:
+   When you run the application for the first time, it will automatically:
+   - Open your browser for OAuth authorization
+   - Save the tokens to your config file
+   - Continue with the tracklist update
 
 ### 3. Basic Usage
 
-**Test with dry run** (recommended first):
-```bash
-./mixcloud-updater -cue-file "MYR12345.cue" -show-name "Morning Show" -dry-run
-```
-
-**Update live show**:
+**Update a show**:
 ```bash
 ./mixcloud-updater -cue-file "MYR12345.cue" -show-name "Morning Show"
+```
+
+**Preview without updating** (dry run):
+```bash
+./mixcloud-updater -cue-file "MYR12345.cue" -show-name "Morning Show" -dry-run
 ```
 
 **Get help**:
@@ -157,7 +156,8 @@ excluded_title_patterns = ["(?i)advertisement", "(?i)sponsored"]
 **"OAuth authentication failed"**
 - Verify `client_id` and `client_secret` are correct
 - Check internet connection
-- Try deleting `access_token` and `refresh_token` from config to re-authenticate
+- Delete `access_token` from config.toml and run again
+- The app will automatically re-authenticate when needed
 
 **"No tracks remaining after filtering"**
 - Check your filtering rules aren't too aggressive
@@ -196,62 +196,59 @@ Configuration:
   Dry Run: true
 
 Loading configuration...
-Station: WXYZ Radio
-Mixcloud Username: wxyzradio
-OAuth Tokens: configured
-Configuration loaded successfully.
+Configuration loaded.
 
-Step 1: Parsing CUE file...
-✓ Parsed 25 tracks from CUE file (0.12s)
+Parsing CUE file...
+Filtering tracks...
+Locating Mixcloud show...
+Updating show description...
 
-Step 2: Initializing content filter...
-✓ Content filter initialized (0.01s)
-
-Step 3: Filtering tracks...
-✓ Filtered tracks: 18 included, 7 excluded (0.02s)
-
-Step 4: Formatting tracklist...
-✓ Tracklist formatted (892 characters, 0.01s)
-
-Step 5: Initializing Mixcloud client...
-✓ Mixcloud client initialized (0.15s)
-
-Step 6: Locating Mixcloud show...
-Generated show URL: https://www.mixcloud.com/wxyzradio/morning-show/
-✓ Dry run mode - skipping show verification (0.01s)
-
-Step 7: Updating show description...
-DRY RUN MODE - Would update show with:
+DRY RUN - Would update with:
 ─────────────────────────────────────────
 06:15 - "Good Morning" by Artist Name
 08:23 - "Wake Up Song" by Another Artist
 ...
 ─────────────────────────────────────────
-✓ Dry run completed - no changes made (0.00s)
 
-═══════════════════════════════════════════
-             WORKFLOW SUMMARY              
-═══════════════════════════════════════════
-Status: ✓ SUCCESS
-Mode: DRY RUN (no changes made)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Summary: 18/25 tracks included (72%) • 0.3s
+Show: https://www.mixcloud.com/wxyzradio/morning-show/
 
-Track Processing:
-  • Parsed from CUE: 25 tracks
-  • Included after filtering: 18 tracks
-  • Excluded by filters: 7 tracks
-  • Inclusion rate: 72.0%
+Dry run complete. To apply changes, run again without --dry-run
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Output:
-  • Formatted tracklist: 892 characters
-  • Target show URL: https://www.mixcloud.com/wxyzradio/morning-show/
-
-Performance Timing:
-  • Total execution time: 0.32s
-
-💡 This was a dry run. To apply changes, run again without --dry-run
-═══════════════════════════════════════════
 ✓ Done!
 ```
+
+## OAuth Authentication
+
+The application handles OAuth authentication automatically:
+
+1. **First run**: When tokens are missing, the app will:
+   - Open your browser to Mixcloud's authorization page
+   - Wait for you to approve access
+   - Save the tokens to your config file
+   - Continue with the requested operation
+
+2. **Token expiry**: If your tokens expire:
+   - Simply run your command again
+   - The app will automatically re-authenticate
+   - No manual intervention needed
+
+3. **Manual reset**: To force re-authentication:
+   - Delete the `access_token` line from your config.toml
+   - Run the app normally
+
+## Production Automation
+
+Once OAuth is configured, the application runs completely unattended:
+
+```bash
+# Cron job example - runs every 2 hours
+0 */2 * * * /path/to/mixcloud-updater -cue-file /radio/latest.cue -show-name "Automated Show"
+```
+
+The OAuth tokens persist indefinitely once configured, making it perfect for automation.
 
 ## Building from Source
 

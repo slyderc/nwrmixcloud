@@ -1,4 +1,4 @@
-.PHONY: build-windows build-macos build-all clean
+.PHONY: build-windows build-macos build-all clean install
 
 # Build for Windows (AMD64)
 build-windows:
@@ -15,6 +15,10 @@ build-all: build-windows build-macos
 clean:
 	rm -rf bin/
 	mkdir -p bin/
+
+install: clean build-all
+	cp bin/mixcloud-updater.exe /Volumes/Myriad/Publish
+	cp bin/mixcloud-updater-macos /usr/local/bin
 
 # Default target
 all: build-all

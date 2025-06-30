@@ -43,6 +43,7 @@ make clean            # Remove build artifacts
 -config string       # Config file path (default: config.toml)
 -dry-run            # Preview changes without updating Mixcloud
 -help               # Show help information
+-version            # Show version information
 ```
 
 ## Architecture Overview
@@ -215,3 +216,55 @@ Multi-layer filtering with clear precedence:
 - `golang.org/x/text` - Unicode normalization for international characters
 
 The application has minimal external dependencies and uses Go's standard library extensively.
+
+## Production Automation Setup
+
+### OAuth Setup
+
+The application handles OAuth automatically:
+
+1. **First run:**
+   ```bash
+   ./mixcloud-updater -cue-file show.cue -show-name "My Weekly Show"
+   # Browser opens automatically for authorization
+   # Tokens are saved to config.toml
+   ```
+
+2. **Subsequent runs:**
+   ```bash
+   # No re-authorization needed - tokens persist
+   ./mixcloud-updater -cue-file show.cue -show-name "My Weekly Show"
+   ```
+
+### Automation Examples
+
+**Cron Job (Run every 2 hours):**
+```bash
+# Add to crontab with: crontab -e
+0 */2 * * * /path/to/mixcloud-updater -cue-file /radio/shows/latest.cue -show-name "Weekly Show"
+```
+
+**Script for Multiple Shows:**
+```bash
+#!/bin/bash
+# Process all CUE files in a directory
+for cue_file in /radio/shows/*.cue; do
+    show_date=$(date +"%m-%d-%Y")
+    ./mixcloud-updater -cue-file "$cue_file" -show-name "Radio Show $show_date"
+done
+```
+
+**Integration with Radio Software:**
+```bash
+# Add this to your radio automation software's post-show hook
+/path/to/mixcloud-updater -cue-file "$SHOW_CUE_FILE" -show-name "$SHOW_NAME"
+```
+
+### Troubleshooting
+
+- **OAuth is automatic** - browser launches when authentication needed
+- **Tokens persist** - once authorized, runs unattended
+- Use `-dry-run` to test without uploading
+- Check logs for CUE parsing or API errors
+- Verify show name matches Mixcloud URL format
+- To force re-auth: delete `access_token` from config.toml

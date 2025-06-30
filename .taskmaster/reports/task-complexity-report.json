@@ -1,0 +1,37 @@
+{
+	"meta": {
+		"generatedAt": "2025-06-30T04:02:57.295Z",
+		"tasksAnalyzed": 1,
+		"totalTasks": 13,
+		"analysisCount": 3,
+		"thresholdScore": 5,
+		"projectName": "Taskmaster",
+		"usedResearch": false
+	},
+	"complexityAnalysis": [
+		{
+			"taskId": 11,
+			"taskTitle": "Implement Templating System for Customizable Tracklist Output",
+			"complexityScore": 8,
+			"recommendedSubtasks": 7,
+			"expansionPrompt": "Break down the implementation of a Go text/template-based formatting system that allows users to define custom tracklist output formats via config.toml. Include template configuration parsing, template engine implementation with custom functions, integration with existing formatter, CLI flag support, validation/error handling, and comprehensive testing. Ensure backward compatibility with the existing hardcoded format.",
+			"reasoning": "This task requires significant architectural changes including: new template engine design, config schema extension, custom template functions, smart truncation algorithm adaptation, backward compatibility layer, CLI interface changes, and extensive testing. The complexity stems from integrating Go's template system while maintaining existing functionality and the 1000-character limit constraint."
+		},
+		{
+			"taskId": 12,
+			"taskTitle": "Implement unified config-driven architecture for single-command operation",
+			"complexityScore": 9,
+			"recommendedSubtasks": 12,
+			"expansionPrompt": "Break down the implementation of a unified config-driven architecture that transforms the Mixcloud updater into a single-command tool. Focus on creating a robust show configuration system with alias resolution, pattern-based CUE file detection, template selection, date extraction, and batch processing capabilities. Each subtask should cover a specific component: config schema extension, alias resolver, CUE file pattern matching, template integration, CLI refactoring, ShowProcessor implementation, error handling with batch reporting, and comprehensive testing with documentation updates.",
+			"reasoning": "This task involves a complete architectural overhaul requiring multiple interconnected components. The complexity stems from: 1) Extending the config system to support multiple shows with various mapping strategies, 2) Building an alias resolution system for user-friendly show references, 3) Implementing intelligent CUE file detection with pattern matching and date extraction, 4) Integrating a flexible templating system with per-show customization, 5) Refactoring the CLI to a simpler single-command interface, 6) Creating a robust processor that handles both individual and batch operations, 7) Implementing comprehensive error handling for production reliability, and 8) Ensuring backward compatibility. The 12 subtasks would cover config schema, alias resolution, CUE detection, templating, CLI refactoring, processor implementation, error handling, and testing/documentation."
+		},
+		{
+			"taskId": 13,
+			"taskTitle": "Implement enhanced configuration validator with startup validation and --validate-only mode",
+			"complexityScore": 8,
+			"recommendedSubtasks": 6,
+			"expansionPrompt": "Break down the implementation of a comprehensive configuration validation system into subtasks covering: 1) Core validation framework setup with error/warning types, 2) OAuth and filesystem validation, 3) Show configuration and URL validation, 4) Template syntax and regex pattern validation, 5) Main application integration with startup checks, 6) CLI validate-only mode and comprehensive testing",
+			"reasoning": "This task involves creating a new validation subsystem with multiple validation categories (OAuth, filesystem, templates, regex), complex error handling with severity levels, integration with the main application flow, and a new CLI mode. The detailed implementation spec shows significant architectural work across multiple files and validation domains."
+		}
+	]
+}

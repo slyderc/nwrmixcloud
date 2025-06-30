@@ -18,7 +18,17 @@
       "mcp__taskmaster-ai__update_subtask",
       "Bash(go test:*)",
       "Bash(./mixcloud-updater --help)",
-      "mcp__taskmaster-ai__update_task"
+      "mcp__taskmaster-ai__update_task",
+      "Bash(git push:*)",
+      "Bash(./mixcloud-updater -help)",
+      "Bash(./mixcloud-updater:*)",
+      "Bash(rg:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(cp:*)",
+      "Bash(./bin/mixcloud-updater-macos:*)",
+      "mcp__taskmaster-ai__add_task",
+      "mcp__taskmaster-ai__expand_task",
+      "mcp__taskmaster-ai__analyze_project_complexity"
     ],
     "deny": []
   }
