@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nowwaveradio/mixcloud-updater/internal/dateutil"
 )
 
 // Config represents logging configuration
@@ -66,6 +68,11 @@ func Get() *Logger {
 
 // NewLogger creates a new logger with the given configuration
 func NewLogger(config Config) (*Logger, error) {
+	// AIDEV-NOTE: Validate filename pattern for cross-platform compatibility
+	if err := ValidateFilenamePattern(config.FilenamePattern); err != nil {
+		return nil, fmt.Errorf("invalid filename pattern: %w", err)
+	}
+
 	logger := &Logger{
 		config: config,
 	}
@@ -193,28 +200,14 @@ func expandLogDirectory(dir string) string {
 	return "logs"
 }
 
-// generateLogFilename creates a filename from the pattern
+// generateLogFilename creates a filename from the pattern using unified date formatting
 func generateLogFilename(pattern string) string {
 	if pattern == "" {
-		pattern = "mixcloud-updater-%Y%m%d.log"
+		pattern = "mixcloud-updater-YYYYMMDD.log"
 	}
 	
-	// Replace date/time placeholders
-	now := time.Now()
-	replacements := map[string]string{
-		"%Y": fmt.Sprintf("%04d", now.Year()),
-		"%m": fmt.Sprintf("%02d", now.Month()),
-		"%d": fmt.Sprintf("%02d", now.Day()),
-		"%H": fmt.Sprintf("%02d", now.Hour()),
-		"%M": fmt.Sprintf("%02d", now.Minute()),
-	}
-	
-	fileName := pattern
-	for placeholder, value := range replacements {
-		fileName = strings.ReplaceAll(fileName, placeholder, value)
-	}
-	
-	return fileName
+	// AIDEV-NOTE: Now uses unified date formatting consistent with main application
+	return dateutil.FormatDateWithPattern(time.Now(), pattern)
 }
 
 // parseLogLevel converts string level to slog.Level
@@ -309,11 +302,13 @@ func (l *Logger) rotate() error {
 // cleanOldFiles removes log files older than MaxFiles
 func (l *Logger) cleanOldFiles() {
 	logDir := filepath.Dir(l.fileName)
-	pattern := strings.ReplaceAll(l.config.FilenamePattern, "%Y", "*")
-	pattern = strings.ReplaceAll(pattern, "%m", "*")
-	pattern = strings.ReplaceAll(pattern, "%d", "*")
-	pattern = strings.ReplaceAll(pattern, "%H", "*")
-	pattern = strings.ReplaceAll(pattern, "%M", "*")
+	// AIDEV-NOTE: Convert unified date patterns to glob wildcards for file matching
+	pattern := strings.ReplaceAll(l.config.FilenamePattern, "YYYY", "*")
+	pattern = strings.ReplaceAll(pattern, "YY", "*")
+	pattern = strings.ReplaceAll(pattern, "MM", "*")
+	pattern = strings.ReplaceAll(pattern, "M", "*")
+	pattern = strings.ReplaceAll(pattern, "DD", "*")
+	pattern = strings.ReplaceAll(pattern, "D", "*")
 	
 	matches, err := filepath.Glob(filepath.Join(logDir, pattern))
 	if err != nil {
@@ -344,9 +339,11 @@ func (l *Logger) cleanOldFiles() {
 		}
 	}
 	
-	// Remove old files
-	for i := l.config.MaxFiles; i < len(files); i++ {
-		os.Remove(files[i].path)
+	// Remove old files (only if MaxFiles is positive and we have excess files)
+	if l.config.MaxFiles > 0 && len(files) > l.config.MaxFiles {
+		for i := l.config.MaxFiles; i < len(files); i++ {
+			os.Remove(files[i].path)
+		}
 	}
 }
 

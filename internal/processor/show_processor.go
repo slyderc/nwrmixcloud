@@ -11,6 +11,7 @@ import (
 
 	"github.com/nowwaveradio/mixcloud-updater/internal/config"
 	"github.com/nowwaveradio/mixcloud-updater/internal/cue"
+	"github.com/nowwaveradio/mixcloud-updater/internal/dateutil"
 	"github.com/nowwaveradio/mixcloud-updater/internal/filter"
 	"github.com/nowwaveradio/mixcloud-updater/internal/formatter"
 	"github.com/nowwaveradio/mixcloud-updater/internal/logger"
@@ -463,46 +464,15 @@ func (sp *ShowProcessor) generateShowName(showCfg *config.ShowConfig, cueFile st
 
 
 // convertDateFormatToGoLayout converts user-friendly date formats to Go time layouts
+// AIDEV-NOTE: Deprecated - replaced by dateutil.FormatDateToGoLayout for consistency
 func (sp *ShowProcessor) convertDateFormatToGoLayout(userFormat string) string {
-	// Replace user-friendly patterns with Go time reference patterns
-	replacer := strings.NewReplacer(
-		"YYYY", "2006",  // 4-digit year
-		"YY", "06",      // 2-digit year
-		"MM", "01",      // 2-digit month with leading zero
-		"M", "1",        // 1-2 digit month without leading zero
-		"DD", "02",      // 2-digit day with leading zero
-		"D", "2",        // 1-2 digit day without leading zero
-	)
-	
-	return replacer.Replace(userFormat)
+	return dateutil.FormatDateToGoLayout(userFormat)
 }
 
 // parseFlexibleDate attempts to parse a date string using various common formats
+// AIDEV-NOTE: Deprecated - replaced by dateutil.ParseFlexibleDate for consistency
 func (sp *ShowProcessor) parseFlexibleDate(dateStr string) (time.Time, error) {
-	// Try various common date formats
-	formats := []string{
-		"1/2/2006",      // M/D/YYYY
-		"01/02/2006",    // MM/DD/YYYY
-		"2006-01-02",    // YYYY-MM-DD
-		"2006_01_02",    // YYYY_MM_DD
-		"20060102",      // YYYYMMDD
-		"2-1-2006",      // D-M-YYYY
-		"02-01-2006",    // DD-MM-YYYY
-		"2006.01.02",    // YYYY.MM.DD
-		"Jan 2, 2006",   // Mon D, YYYY
-		"January 2, 2006", // Month D, YYYY
-		"2/1/2006",      // D/M/YYYY
-		"02/01/2006",    // DD/MM/YYYY
-		"2006/01/02",    // YYYY/MM/DD
-	}
-	
-	for _, format := range formats {
-		if parsedDate, err := time.Parse(format, dateStr); err == nil {
-			return parsedDate, nil
-		}
-	}
-	
-	return time.Time{}, fmt.Errorf("unable to parse date string '%s' - try formats like MM/DD/YYYY, M/D/YYYY, or YYYYMMDD", dateStr)
+	return dateutil.ParseFlexibleDate(dateStr)
 }
 
 // printSingleResult displays results for single show processing

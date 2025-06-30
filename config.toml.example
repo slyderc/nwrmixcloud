@@ -61,6 +61,7 @@ excluded_title_patterns = [
 
 [processing]
 # Global processing configuration
+# Windows users: Use forward slashes "C:/Myriad/Data" or single quotes 'C:\Myriad\Data'
 cue_file_directory = "/path/to/your/cue/files"
 auto_process = false  # Process all enabled shows automatically
 batch_size = 5       # Number of shows to process concurrently

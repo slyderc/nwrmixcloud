@@ -203,32 +203,49 @@ func TestLoggerInitialization(t *testing.T) {
 	}
 }
 
-// TestLogFilenameGeneration tests filename pattern replacement
+// TestLogFilenameGeneration tests filename pattern replacement with unified date formatting
 func TestLogFilenameGeneration(t *testing.T) {
 	tests := []struct {
-		name    string
-		pattern string
-		want    string // substring that should be present
+		name        string
+		pattern     string
+		want        string // substring that should be present
+		wantPattern string // pattern to check
 	}{
 		{
-			name:    "basic daily pattern",
-			pattern: "app-%Y%m%d.log",
-			want:    ".log",
+			name:        "YYYYMMDD pattern (new unified format)",
+			pattern:     "app-YYYYMMDD.log",
+			want:        ".log",
+			wantPattern: `app-\d{8}\.log`, // app-20250630.log
 		},
 		{
-			name:    "hourly pattern",
-			pattern: "app-%Y%m%d-%H%M.log",
-			want:    ".log",
+			name:        "YYYY.MM.DD pattern",
+			pattern:     "app-YYYY.MM.DD.log",
+			want:        ".log",
+			wantPattern: `app-\d{4}\.\d{2}\.\d{2}\.log`,
 		},
 		{
-			name:    "empty pattern uses default",
-			pattern: "",
-			want:    "mixcloud-updater-",
+			name:        "MM/DD/YYYY pattern",
+			pattern:     "app-MM/DD/YYYY.log",
+			want:        ".log",
+			wantPattern: `app-\d{2}/\d{2}/\d{4}\.log`,
 		},
 		{
-			name:    "no placeholders",
-			pattern: "static.log",
-			want:    "static.log",
+			name:        "empty pattern uses default",
+			pattern:     "",
+			want:        "mixcloud-updater-",
+			wantPattern: `mixcloud-updater-\d{8}\.log`,
+		},
+		{
+			name:        "no placeholders",
+			pattern:     "static.log",
+			want:        "static.log",
+			wantPattern: `static\.log`,
+		},
+		{
+			name:        "mixed pattern",
+			pattern:     "logs/app-YYYY-MM-DD-test.log",
+			want:        "logs/",
+			wantPattern: `logs/app-\d{4}-\d{2}-\d{2}-test\.log`,
 		},
 	}
 
@@ -236,14 +253,34 @@ func TestLogFilenameGeneration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := generateLogFilename(tt.pattern)
 			
+			// Check for expected substring
 			if !strings.Contains(result, tt.want) {
 				t.Errorf("generateLogFilename(%s) = %s, expected to contain %s", tt.pattern, result, tt.want)
 			}
 			
+			// Verify the result matches expected pattern
+			if tt.wantPattern != "" {
+				// For more precise checking, let's verify date components
+				if strings.Contains(tt.pattern, "YYYY") {
+					year := time.Now().Format("2006")
+					if !strings.Contains(result, year) {
+						t.Errorf("Expected filename to contain current year %s, got: %s", year, result)
+					}
+				}
+				if strings.Contains(tt.pattern, "MM") {
+					month := time.Now().Format("01")
+					if !strings.Contains(result, month) {
+						t.Errorf("Expected filename to contain current month %s, got: %s", month, result)
+					}
+				}
+			}
+			
 			// Verify the result is a valid filename
-			if strings.ContainsAny(result, "/\\:*?\"<>|") {
+			if strings.ContainsAny(result, ":*?\"<>|") {
 				t.Errorf("Generated filename contains invalid characters: %s", result)
 			}
+			
+			t.Logf("Pattern %q generated filename: %s", tt.pattern, result)
 		})
 	}
 }
@@ -277,14 +314,14 @@ func TestLogLevelParsing(t *testing.T) {
 	}
 }
 
-// TestLogRotation tests log file rotation functionality
+// TestLogRotation tests log file rotation functionality with unified date formatting
 func TestLogRotation(t *testing.T) {
 	tempDir := t.TempDir()
 
 	config := Config{
 		Enabled:         true,
 		Directory:       tempDir,
-		FilenamePattern: "rotation-test-%Y%m%d.log",
+		FilenamePattern: "rotation-test-YYYYMMDD.log", // New unified format
 		Level:           "info",
 		MaxFiles:        3,
 		MaxSizeMB:       1, // Small size to trigger rotation
@@ -309,7 +346,7 @@ func TestLogRotation(t *testing.T) {
 		time.Sleep(10 * time.Millisecond) // Small delay to ensure different timestamps
 	}
 
-	// Check that log files were created
+	// Check that log files were created using new pattern
 	files, err := filepath.Glob(filepath.Join(tempDir, "rotation-test-*.log"))
 	if err != nil {
 		t.Fatalf("Failed to list log files: %v", err)
@@ -317,6 +354,21 @@ func TestLogRotation(t *testing.T) {
 
 	if len(files) == 0 {
 		t.Errorf("No log files were created")
+	}
+
+	// Verify filenames match the new date format
+	expectedPrefix := "rotation-test-" + time.Now().Format("20060102")
+	found := false
+	for _, file := range files {
+		basename := filepath.Base(file)
+		if strings.HasPrefix(basename, expectedPrefix) {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Errorf("No log files found with expected date format. Expected prefix: %s, Found files: %v", expectedPrefix, files)
 	}
 
 	t.Logf("Created %d log files: %v", len(files), files)
