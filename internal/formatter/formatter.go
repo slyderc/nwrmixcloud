@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/nowwaveradio/mixcloud-updater/internal/config"
 	"github.com/nowwaveradio/mixcloud-updater/internal/cue"
 	"github.com/nowwaveradio/mixcloud-updater/internal/filter"
+	"github.com/nowwaveradio/mixcloud-updater/internal/template"
 )
 
 // AIDEV-NOTE: Mixcloud has a 1000 character limit for descriptions
@@ -22,7 +24,9 @@ type FormatterInterface interface {
 
 // Formatter handles conversion of filtered CUE tracks into formatted tracklists
 type Formatter struct {
-	maxLength int // Character limit for Mixcloud descriptions
+	maxLength         int                       // Character limit for Mixcloud descriptions
+	templateFormatter *template.TemplateFormatter // Template-based formatter (nil if not configured)
+	config           *config.Config            // Configuration for template access
 }
 
 // FormatOptions provides configuration for formatting behavior
@@ -47,7 +51,27 @@ func DefaultFormatOptions() FormatOptions {
 func NewFormatter() *Formatter {
 	return &Formatter{
 		maxLength: 1000, // Mixcloud's character limit
+		config:    nil,
 	}
+}
+
+// NewFormatterWithConfig creates a new Formatter instance with template support
+func NewFormatterWithConfig(cfg *config.Config) *Formatter {
+	formatter := &Formatter{
+		maxLength: 1000,
+		config:    cfg,
+	}
+	
+	// Initialize template formatter if templates are configured
+	if cfg != nil && len(cfg.Templates.Templates) > 0 {
+		templateFormatter := template.NewTemplateFormatter(cfg)
+		if err := templateFormatter.LoadTemplates(); err == nil {
+			formatter.templateFormatter = templateFormatter
+		}
+		// If template loading fails, we'll fall back to classic formatting
+	}
+	
+	return formatter
 }
 
 // NewFormatterWithOptions creates a new Formatter with custom options
@@ -82,6 +106,78 @@ func (f *Formatter) FormatTracklist(tracks []cue.Track, trackFilter *filter.Filt
 		return ""
 	}
 	
+	// Check if template formatting is available and configured
+	if f.templateFormatter != nil && f.config != nil {
+		// Use template-based formatting with default template
+		defaultTemplate := f.templateFormatter.GetDefaultTemplateName()
+		if f.templateFormatter.HasTemplate(defaultTemplate) {
+			// Apply filtering first
+			filteredTracks := f.applyFilter(tracks, trackFilter)
+			
+			// Use template formatting
+			result, err := f.templateFormatter.FormatWithTemplate(defaultTemplate, filteredTracks, trackFilter, nil)
+			if err == nil {
+				return result
+			}
+			// Fall through to classic formatting on error
+		}
+	}
+	
+	// Fall back to classic formatting
+	return f.formatClassic(tracks, trackFilter)
+}
+
+// FormatTracklistWithTemplate formats tracks using a specific template
+func (f *Formatter) FormatTracklistWithTemplate(tracks []cue.Track, trackFilter *filter.Filter, templateName string, metadata map[string]interface{}) string {
+	// Handle edge cases
+	if tracks == nil || len(tracks) == 0 {
+		return ""
+	}
+	
+	// Check if template formatting is available
+	if f.templateFormatter == nil || !f.templateFormatter.HasTemplate(templateName) {
+		// Fall back to classic formatting
+		return f.formatClassic(tracks, trackFilter)
+	}
+	
+	// Apply filtering first
+	filteredTracks := f.applyFilter(tracks, trackFilter)
+	
+	// Use template formatting
+	result, err := f.templateFormatter.FormatWithTemplate(templateName, filteredTracks, trackFilter, metadata)
+	if err != nil {
+		// Fall back to classic formatting on error
+		return f.formatClassic(tracks, trackFilter)
+	}
+	
+	return result
+}
+
+// applyFilter applies the filter to tracks and returns filtered results
+func (f *Formatter) applyFilter(tracks []cue.Track, trackFilter *filter.Filter) []cue.Track {
+	if trackFilter == nil {
+		// No filter, return all non-empty tracks
+		var result []cue.Track
+		for _, track := range tracks {
+			if !track.IsEmpty() {
+				result = append(result, track)
+			}
+		}
+		return result
+	}
+	
+	// Apply filter
+	var result []cue.Track
+	for _, track := range tracks {
+		if trackFilter.ShouldIncludeTrack(&track) && !track.IsEmpty() {
+			result = append(result, track)
+		}
+	}
+	return result
+}
+
+// formatClassic implements the original classic formatting logic
+func (f *Formatter) formatClassic(tracks []cue.Track, trackFilter *filter.Filter) string {
 	if trackFilter == nil {
 		// If no filter provided, format all tracks
 		return f.formatAllTracks(tracks)
@@ -335,4 +431,41 @@ func (f *Formatter) EstimateTracklistLength(tracks []cue.Track, trackFilter *fil
 	}
 
 	return totalLength
+}
+
+// HasTemplateSupport returns true if the formatter has template support enabled
+func (f *Formatter) HasTemplateSupport() bool {
+	return f.templateFormatter != nil
+}
+
+// ListAvailableTemplates returns the names of all available templates
+func (f *Formatter) ListAvailableTemplates() []string {
+	if f.templateFormatter == nil {
+		return []string{}
+	}
+	return f.templateFormatter.ListTemplates()
+}
+
+// HasTemplate checks if a specific template is available
+func (f *Formatter) HasTemplate(templateName string) bool {
+	if f.templateFormatter == nil {
+		return false
+	}
+	return f.templateFormatter.HasTemplate(templateName)
+}
+
+// GetDefaultTemplateName returns the configured default template name
+func (f *Formatter) GetDefaultTemplateName() string {
+	if f.templateFormatter == nil {
+		return "classic"
+	}
+	return f.templateFormatter.GetDefaultTemplateName()
+}
+
+// ValidateTemplate validates a template's syntax and execution
+func (f *Formatter) ValidateTemplate(templateName string) error {
+	if f.templateFormatter == nil {
+		return fmt.Errorf("template support not enabled")
+	}
+	return f.templateFormatter.ValidateTemplate(templateName)
 }

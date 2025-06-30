@@ -40,6 +40,18 @@ type Config struct {
 	Paths struct {
 		CueFileDirectory string `toml:"cue_file_directory"`
 	} `toml:"paths"`
+	
+	Templates struct {
+		Default   string                    `toml:"default"`
+		Templates map[string]TemplateConfig `toml:"templates"`
+	} `toml:"templates"`
+}
+
+// TemplateConfig represents a template configuration for tracklist formatting
+type TemplateConfig struct {
+	Header string `toml:"header"`
+	Track  string `toml:"track"`
+	Footer string `toml:"footer"`
 }
 
 // ConfigError represents configuration-related errors
@@ -182,6 +194,13 @@ func DefaultConfig() *Config {
 		}{
 			CueFileDirectory: ".", // Default to current directory
 		},
+		Templates: struct {
+			Default   string                    `toml:"default"`
+			Templates map[string]TemplateConfig `toml:"templates"`
+		}{
+			Default:   "classic", // Use existing hardcoded format as default
+			Templates: make(map[string]TemplateConfig),
+		},
 	}
 }
 
@@ -229,6 +248,19 @@ func mergeWithDefaults(loaded, defaults *Config) *Config {
 	// Merge Paths values
 	if loaded.Paths.CueFileDirectory != "" {
 		result.Paths.CueFileDirectory = loaded.Paths.CueFileDirectory
+	}
+
+	// Merge Templates values
+	if loaded.Templates.Default != "" {
+		result.Templates.Default = loaded.Templates.Default
+	}
+	if len(loaded.Templates.Templates) > 0 {
+		if result.Templates.Templates == nil {
+			result.Templates.Templates = make(map[string]TemplateConfig)
+		}
+		for name, template := range loaded.Templates.Templates {
+			result.Templates.Templates[name] = template
+		}
 	}
 
 	return &result

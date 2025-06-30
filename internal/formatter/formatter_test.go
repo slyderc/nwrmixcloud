@@ -307,3 +307,202 @@ func TestEdgeCases(t *testing.T) {
 		t.Errorf("Expected empty string for all empty tracks, got %q", result)
 	}
 }
+
+// Template Integration Tests
+
+func TestNewFormatterWithConfig(t *testing.T) {
+	cfg := &config.Config{
+		Templates: struct {
+			Default   string                    `toml:"default"`
+			Templates map[string]config.TemplateConfig `toml:"templates"`
+		}{
+			Default: "simple",
+			Templates: map[string]config.TemplateConfig{
+				"simple": {
+					Header: "Playlist:\n",
+					Track:  "{{.StartTime}} - {{.Title}} by {{.Artist}}\n",
+					Footer: "Total: {{.TrackCount}} tracks",
+				},
+			},
+		},
+	}
+
+	formatter := NewFormatterWithConfig(cfg)
+	if formatter == nil {
+		t.Fatal("NewFormatterWithConfig returned nil")
+	}
+
+	if !formatter.HasTemplateSupport() {
+		t.Error("Formatter should have template support")
+	}
+
+	if !formatter.HasTemplate("simple") {
+		t.Error("Formatter should have 'simple' template")
+	}
+
+	if formatter.GetDefaultTemplateName() != "simple" {
+		t.Errorf("Expected default template 'simple', got %s", formatter.GetDefaultTemplateName())
+	}
+}
+
+func TestNewFormatterWithConfigNoTemplates(t *testing.T) {
+	cfg := &config.Config{}
+
+	formatter := NewFormatterWithConfig(cfg)
+	if formatter == nil {
+		t.Fatal("NewFormatterWithConfig returned nil")
+	}
+
+	if formatter.HasTemplateSupport() {
+		t.Error("Formatter should not have template support when no templates configured")
+	}
+
+	templates := formatter.ListAvailableTemplates()
+	if len(templates) != 0 {
+		t.Errorf("Expected 0 templates, got %d", len(templates))
+	}
+}
+
+func TestFormatTracklistWithTemplate(t *testing.T) {
+	cfg := &config.Config{
+		Station: struct {
+			Name             string `toml:"name"`
+			MixcloudUsername string `toml:"mixcloud_username"`
+		}{
+			Name: "Test Station",
+		},
+		Templates: struct {
+			Default   string                    `toml:"default"`
+			Templates map[string]config.TemplateConfig `toml:"templates"`
+		}{
+			Default: "test",
+			Templates: map[string]config.TemplateConfig{
+				"test": {
+					Header: "Show Tracklist:\n",
+					Track:  "{{.Index}}. {{.StartTime}} - {{.Title}} by {{.Artist}}\n",
+					Footer: "Broadcast by {{.StationName}}",
+				},
+			},
+		},
+	}
+
+	formatter := NewFormatterWithConfig(cfg)
+	
+	tracks := []cue.Track{
+		{StartTime: "00:00", Artist: "Artist One", Title: "Song One"},
+		{StartTime: "03:30", Artist: "Artist Two", Title: "Song Two"},
+	}
+
+	filter, err := filter.NewFilter(&config.Config{})
+	if err != nil {
+		t.Fatalf("NewFilter failed: %v", err)
+	}
+
+	// Test default template via FormatTracklist
+	result := formatter.FormatTracklist(tracks, filter)
+	
+	if !strings.Contains(result, "Show Tracklist:") {
+		t.Error("Result should contain header")
+	}
+	if !strings.Contains(result, "1. 00:00 - Song One by Artist One") {
+		t.Error("Result should contain formatted track 1")
+	}
+	if !strings.Contains(result, "2. 03:30 - Song Two by Artist Two") {
+		t.Error("Result should contain formatted track 2")
+	}
+	if !strings.Contains(result, "Broadcast by Test Station") {
+		t.Error("Result should contain footer")
+	}
+}
+
+func TestFormatTracklistFallbackToClassic(t *testing.T) {
+	// Test with no template configuration
+	formatter := NewFormatter()
+	
+	tracks := []cue.Track{
+		{StartTime: "00:00", Artist: "Artist One", Title: "Song One"},
+	}
+
+	filter, err := filter.NewFilter(&config.Config{})
+	if err != nil {
+		t.Fatalf("NewFilter failed: %v", err)
+	}
+
+	result := formatter.FormatTracklist(tracks, filter)
+	expected := `00:00 - "Song One" by Artist One`
+	if result != expected {
+		t.Errorf("Classic fallback mismatch.\nExpected: %q\nGot: %q", expected, result)
+	}
+}
+
+func TestTemplateHelperMethods(t *testing.T) {
+	cfg := &config.Config{
+		Templates: struct {
+			Default   string                    `toml:"default"`
+			Templates map[string]config.TemplateConfig `toml:"templates"`
+		}{
+			Default: "test",
+			Templates: map[string]config.TemplateConfig{
+				"test": {Track: "{{.Title}}\n"},
+				"another": {Track: "{{.Artist}}\n"},
+			},
+		},
+	}
+
+	formatter := NewFormatterWithConfig(cfg)
+
+	// Test ListAvailableTemplates
+	templates := formatter.ListAvailableTemplates()
+	if len(templates) != 2 {
+		t.Errorf("Expected 2 templates, got %d", len(templates))
+	}
+
+	// Test HasTemplate
+	if !formatter.HasTemplate("test") {
+		t.Error("Should have 'test' template")
+	}
+	if !formatter.HasTemplate("another") {
+		t.Error("Should have 'another' template")
+	}
+	if formatter.HasTemplate("nonexistent") {
+		t.Error("Should not have 'nonexistent' template")
+	}
+
+	// Test ValidateTemplate
+	err := formatter.ValidateTemplate("test")
+	if err != nil {
+		t.Errorf("Template validation should pass: %v", err)
+	}
+
+	err = formatter.ValidateTemplate("nonexistent")
+	if err == nil {
+		t.Error("Validation should fail for nonexistent template")
+	}
+}
+
+func TestTemplateHelperMethodsWithoutSupport(t *testing.T) {
+	formatter := NewFormatter() // No template support
+
+	// Test methods without template support
+	if formatter.HasTemplateSupport() {
+		t.Error("Should not have template support")
+	}
+
+	templates := formatter.ListAvailableTemplates()
+	if len(templates) != 0 {
+		t.Errorf("Expected 0 templates, got %d", len(templates))
+	}
+
+	if formatter.HasTemplate("any") {
+		t.Error("Should not have any templates")
+	}
+
+	if formatter.GetDefaultTemplateName() != "classic" {
+		t.Error("Should return 'classic' as default when no template support")
+	}
+
+	err := formatter.ValidateTemplate("any")
+	if err == nil {
+		t.Error("Validation should fail when no template support")
+	}
+}

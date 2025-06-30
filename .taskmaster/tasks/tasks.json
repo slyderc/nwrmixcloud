@@ -684,7 +684,7 @@
         "description": "Create a flexible templating system using Go's text/template package that allows users to define custom tracklist output formats in the config file, supporting headers, footers, and multiple named templates for different use cases",
         "details": "Extend the formatter package to support Go's text/template syntax:\n\n```go\ntype TemplateFormatter struct {\n    templates map[string]*template.Template\n    fallback  *Formatter // existing formatter for backward compatibility\n}\n\ntype TemplateData struct {\n    ShowTitle    string\n    ShowDate     string\n    TrackCount   int\n    Tracks       []FormattedTrack\n    StationName  string\n    Custom       map[string]interface{} // user-defined variables\n}\n\ntype FormattedTrack struct {\n    Index     int\n    StartTime string\n    Artist    string\n    Title     string\n    Genre     string\n    Duration  string // if available\n}\n```\n\nAdd template configuration to config.toml:\n```toml\n[templates]\ndefault = \"classic\" # fallback to hardcoded format\n\n[templates.minimal]\nheader = \"Tracklist:\\n\"\ntrack = \"{{.StartTime}} - {{.Title}} by {{.Artist}}\\n\"\nfooter = \"\\nTotal tracks: {{.TrackCount}}\"\n\n[templates.detailed]\nheader = \"{{.ShowTitle}} - {{.ShowDate}}\\n{{repeat \"-\" 50}}\\n\"\ntrack = \"{{printf \"%02d\" .Index}}. [{{.StartTime}}] {{.Artist}} - {{.Title}}{{if .Genre}} ({{.Genre}}){{end}}\\n\"\nfooter = \"\\n{{repeat \"-\" 50}}\\nBroadcast by {{.StationName}} | {{.TrackCount}} tracks played\"\n\n[templates.markdown]\nheader = \"## {{.ShowTitle}}\\n### {{.ShowDate}}\\n\\n\"\ntrack = \"- **{{.StartTime}}** - *{{.Title}}* by {{.Artist}}\\n\"\nfooter = \"\\n---\\n*Generated automatically from CUE sheet*\"\n```\n\nImplement template functions:\n```go\nfunc (tf *TemplateFormatter) LoadTemplates(config *config.Config) error {\n    // Parse template definitions from config\n    // Register custom template functions:\n    funcMap := template.FuncMap{\n        \"repeat\": strings.Repeat,\n        \"upper\":  strings.ToUpper,\n        \"lower\":  strings.ToLower,\n        \"truncate\": func(s string, n int) string {\n            if len(s) <= n {\n                return s\n            }\n            return s[:n] + \"...\"\n        },\n    }\n}\n\nfunc (tf *TemplateFormatter) FormatWithTemplate(name string, tracks []cue.Track, filter *filter.Filter, metadata map[string]interface{}) (string, error) {\n    // Select template by name\n    // Build TemplateData struct\n    // Execute header, tracks, footer templates\n    // Respect 1000 character limit with smart truncation\n}\n```\n\nUpdate CLI to support template selection:\n```go\ntemplateName := flag.String(\"template\", \"default\", \"Template name to use for formatting\")\n```\n\nEnsure backward compatibility:\n- If no templates defined in config, use existing hardcoded format\n- If template parsing fails, fall back to classic formatter\n- Maintain the same FormatTracklist() interface for existing code",
         "testStrategy": "Create comprehensive test suite for template functionality:\n1. Test template parsing from various config formats\n2. Verify all built-in template functions work correctly (repeat, truncate, etc.)\n3. Test with missing template sections (header/footer optional)\n4. Validate character limit enforcement with templates\n5. Test backward compatibility when no templates defined\n6. Create edge case templates with complex conditionals and loops\n7. Verify template errors are handled gracefully with fallback\n8. Test custom template variables passed through metadata\n9. Validate template output matches expected format for each preset\n10. Performance test template rendering with large track lists",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           2,
           8
@@ -697,7 +697,7 @@
             "description": "Extend the existing config package to support template definitions in config.toml, including parsing template sections with header, track, and footer fields",
             "dependencies": [],
             "details": "Update internal/config/config.go to add TemplateConfig struct and Templates map[string]TemplateConfig. Add fields for header, track, footer strings and default template name. Implement TOML unmarshaling for the new [templates] section structure",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Create unit tests with sample TOML configurations containing various template definitions. Test parsing of nested template sections, missing fields, and invalid configurations"
           },
           {
@@ -708,7 +708,7 @@
               1
             ],
             "details": "Create internal/template/engine.go with TemplateFormatter struct containing templates map and fallback formatter. Implement LoadTemplates() to parse template strings from config and register custom functions (repeat, upper, lower, truncate). Define TemplateData and FormattedTrack structs for template execution",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Unit test template parsing, function registration, and execution with mock data. Test custom template functions independently and verify error handling for malformed templates"
           },
           {
@@ -719,7 +719,7 @@
               2
             ],
             "details": "Implement FormatWithTemplate() method that builds TemplateData from tracks and metadata, executes header/track/footer templates separately, and applies smart truncation at line boundaries when approaching character limit. Handle template execution errors gracefully",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test formatting with various track counts and template styles. Verify character limit enforcement, smart truncation behavior, and proper handling of missing template fields"
           },
           {
@@ -730,7 +730,7 @@
               3
             ],
             "details": "Update internal/formatter/formatter.go to detect template configuration and delegate to TemplateFormatter when templates are defined. Maintain FormatTracklist() interface for backward compatibility. Implement fallback logic when template parsing fails or no templates configured",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Integration tests verifying both legacy and template-based formatting work correctly. Test fallback scenarios when templates are unavailable or malformed"
           },
           {
@@ -741,7 +741,7 @@
               4
             ],
             "details": "Update cmd/mixcloud-updater/main.go to add -template flag with default value 'default'. Pass template name through to formatter. Update help text to describe template usage. Handle invalid template names gracefully with informative error messages",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test CLI with various template names including default, custom, and invalid names. Verify proper error messages and fallback behavior"
           },
           {
@@ -752,7 +752,7 @@
               2
             ],
             "details": "Create ValidateTemplate() method to check template syntax during loading. Validate required template variables are available in TemplateData. Implement detailed error messages indicating which template and line has issues. Add template listing functionality to show available templates",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Test validation with malformed templates, missing variables, and syntax errors. Verify error messages are clear and actionable"
           },
           {
@@ -768,7 +768,7 @@
               6
             ],
             "details": "Write table-driven tests for each template component. Add example templates to config.toml.example. Update README with template usage examples and available functions. Document template data structure in CLAUDE.md. Create integration tests with real CUE files using different templates",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "Ensure 80%+ test coverage for new template code. Test edge cases like empty tracks, very long outputs, and Unicode handling. Verify documentation examples work as shown"
           }
         ]
@@ -975,7 +975,7 @@
     ],
     "metadata": {
       "created": "2025-06-29T19:16:03.127Z",
-      "updated": "2025-06-30T04:01:57.153Z",
+      "updated": "2025-06-30T04:35:10.929Z",
       "description": "Tasks for master context"
     }
   }
