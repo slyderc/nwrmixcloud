@@ -314,10 +314,10 @@ func TestNewFormatterWithConfig(t *testing.T) {
 	cfg := &config.Config{
 		Templates: struct {
 			Default   string                    `toml:"default"`
-			Templates map[string]config.TemplateConfig `toml:"templates"`
+			Config map[string]config.TemplateConfig `toml:"config"`
 		}{
 			Default: "simple",
-			Templates: map[string]config.TemplateConfig{
+			Config: map[string]config.TemplateConfig{
 				"simple": {
 					Header: "Playlist:\n",
 					Track:  "{{.StartTime}} - {{.Title}} by {{.Artist}}\n",
@@ -373,10 +373,10 @@ func TestFormatTracklistWithTemplate(t *testing.T) {
 		},
 		Templates: struct {
 			Default   string                    `toml:"default"`
-			Templates map[string]config.TemplateConfig `toml:"templates"`
+			Config map[string]config.TemplateConfig `toml:"config"`
 		}{
 			Default: "test",
-			Templates: map[string]config.TemplateConfig{
+			Config: map[string]config.TemplateConfig{
 				"test": {
 					Header: "Show Tracklist:\n",
 					Track:  "{{.Index}}. {{.StartTime}} - {{.Title}} by {{.Artist}}\n",
@@ -439,10 +439,10 @@ func TestTemplateHelperMethods(t *testing.T) {
 	cfg := &config.Config{
 		Templates: struct {
 			Default   string                    `toml:"default"`
-			Templates map[string]config.TemplateConfig `toml:"templates"`
+			Config map[string]config.TemplateConfig `toml:"config"`
 		}{
 			Default: "test",
-			Templates: map[string]config.TemplateConfig{
+			Config: map[string]config.TemplateConfig{
 				"test": {Track: "{{.Title}}\n"},
 				"another": {Track: "{{.Artist}}\n"},
 			},

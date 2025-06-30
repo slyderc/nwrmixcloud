@@ -74,17 +74,17 @@ default = "classic"
 # Track templates receive: .StartTime, .Artist, .Title, .Genre, .Index
 # Custom functions: upper, lower, title, truncate, repeat, printf, join, add, sub
 
-[templates.templates.classic]
+[templates.config.classic]
 header = "Tracklist for {{.ShowTitle}}:\n\n"
 track = "{{.StartTime}} - \"{{.Title}}\" by {{.Artist}}\n"
 footer = "\n#{{lower .StationName}} #mixcloud"
 
-[templates.templates.detailed]
+[templates.config.detailed]
 header = "🎵 {{upper .ShowTitle}} - {{.ShowDate}} 🎵\n\nFeaturing {{.TrackCount}} tracks:\n\n"
 track = "{{.Index}}. {{.StartTime}} - {{.Artist}} - {{.Title}}\n"
 footer = "\n✨ Curated by {{.StationName}} ✨\n#{{lower .StationName}} #mixcloud"
 
-[templates.templates.minimal]
+[templates.config.minimal]
 header = ""
 track = "{{.StartTime}} {{.Artist}} - {{.Title}}\n"
 footer = ""
@@ -100,13 +100,17 @@ show_name_pattern = "Sounds Like - {date}"
 # Show identification and aliases for CLI lookup
 aliases = ["sounds-like", "sl", "soundslike"]
 
-# Template selection (hierarchy: custom_template > template_name > default > "classic")
-template_name = "detailed"
+# Template selection (hierarchy: custom_template > template > default > "classic")
+template = "detailed"
 # custom_template = "{{.StartTime}} {{.Artist}} - {{.Title}}\n"  # Inline override
 
-# Date extraction from CUE filename (requires capture group in parentheses)
-date_extraction = "SoundsLike_(\\d{4}-\\d{2}-\\d{2})"  # Extracts YYYY-MM-DD
-date_format = "2006-01-02"  # Go time format (currently unused - TODO in code)
+# Date handling:
+# Use current date or -date command line override
+# Format the final date using date_format pattern
+date_format = "M/D/YYYY"  # User-friendly format patterns:
+# M=month (1-12), MM=month (01-12), D=day (1-31), DD=day (01-31)
+# YYYY=year (2024), YY=year (24)
+# Command line override: -date "6/28/2025" (must match this format)
 
 # Processing control
 enabled = true    # Include in batch processing
@@ -116,8 +120,7 @@ priority = 1      # Processing order (higher numbers first)
 cue_file_pattern = "MYR_NewWave_*.cue"
 show_name_pattern = "New Wave Revival - {date}"
 aliases = ["new-wave", "nwr", "revival"]
-template_name = "classic"
-date_extraction = "NewWave_(\\d{4}_\\d{2}_\\d{2})"  # Extracts YYYY_MM_DD format
+template = "classic"
 enabled = true
 priority = 2
 
@@ -125,7 +128,7 @@ priority = 2
 cue_file_pattern = "Morning_*.cue"
 show_name_pattern = "Morning Show - {date}"
 aliases = ["morning", "ms"]
-template_name = "minimal"
+template = "minimal"
 # Alternative: direct file mapping instead of pattern
 # cue_file_mapping = "latest_morning.cue"
 enabled = false   # Disabled - won't be processed in batch mode
@@ -138,9 +141,23 @@ show_name_pattern = "Weekend Mix - {date}"
 aliases = ["weekend", "wm"]
 # Custom template instead of named template
 custom_template = "{{.StartTime}} | {{.Title}} by {{.Artist}}\n"
-date_extraction = "Weekend_(\\d{8})"  # Extracts YYYYMMDD
+date_format = "MM/DD/YYYY"           # With leading zeros
 enabled = true
 priority = 4
+
+# Example show with comprehensive date handling
+[shows.special-events]
+cue_file_pattern = "Event_*.cue"
+show_name_pattern = "Special Event - {date}"
+aliases = ["event", "special"]
+template = "detailed"
+# Date handling examples:
+# 1. Uses current date by default
+# 2. Formats as "6/28/2025" using date_format below
+# 3. Can override with: -date "12/25/2025"
+date_format = "M/D/YYYY"  # No leading zeros: 6/28/2025
+enabled = false
+priority = 5
 
 # Legacy paths section - use processing.cue_file_directory instead
 [paths]

@@ -42,8 +42,8 @@ type Config struct {
 	} `toml:"paths"`
 	
 	Templates struct {
-		Default   string                    `toml:"default"`
-		Templates map[string]TemplateConfig `toml:"templates"`
+		Default string                    `toml:"default"`
+		Config  map[string]TemplateConfig `toml:"config"`
 	} `toml:"templates"`
 	
 	Shows map[string]ShowConfig `toml:"shows"`
@@ -77,7 +77,6 @@ type ShowConfig struct {
 	CustomTemplate string `toml:"custom_template"` // Inline template override
 	
 	// Date/time handling
-	DateExtraction string `toml:"date_extraction"` // Regex to extract date from filename
 	DateFormat     string `toml:"date_format"`     // Format for show title generation
 	
 	// Processing options
@@ -226,11 +225,11 @@ func DefaultConfig() *Config {
 			CueFileDirectory: ".", // Default to current directory
 		},
 		Templates: struct {
-			Default   string                    `toml:"default"`
-			Templates map[string]TemplateConfig `toml:"templates"`
+			Default string                    `toml:"default"`
+			Config  map[string]TemplateConfig `toml:"config"`
 		}{
-			Default:   "classic", // Use existing hardcoded format as default
-			Templates: make(map[string]TemplateConfig),
+			Default: "classic", // Use existing hardcoded format as default
+			Config:  make(map[string]TemplateConfig),
 		},
 		Shows: make(map[string]ShowConfig),
 		Processing: struct {
@@ -295,12 +294,12 @@ func mergeWithDefaults(loaded, defaults *Config) *Config {
 	if loaded.Templates.Default != "" {
 		result.Templates.Default = loaded.Templates.Default
 	}
-	if len(loaded.Templates.Templates) > 0 {
-		if result.Templates.Templates == nil {
-			result.Templates.Templates = make(map[string]TemplateConfig)
+	if len(loaded.Templates.Config) > 0 {
+		if result.Templates.Config == nil {
+			result.Templates.Config = make(map[string]TemplateConfig)
 		}
-		for name, template := range loaded.Templates.Templates {
-			result.Templates.Templates[name] = template
+		for name, template := range loaded.Templates.Config {
+			result.Templates.Config[name] = template
 		}
 	}
 

@@ -11,8 +11,8 @@ func TestTemplateConfigParsing(t *testing.T) {
 		name     string
 		tomlData string
 		expected struct {
-			Default   string
-			Templates map[string]TemplateConfig
+			Default string
+			Config  map[string]TemplateConfig
 		}
 	}{
 		{
@@ -21,22 +21,22 @@ func TestTemplateConfigParsing(t *testing.T) {
 [templates]
 default = "minimal"
 
-[templates.templates.minimal]
+[templates.config.minimal]
 header = "Tracklist:\n"
 track = "{{.StartTime}} - {{.Title}} by {{.Artist}}\n"
 footer = "\nTotal tracks: {{.TrackCount}}"
 
-[templates.templates.detailed]
+[templates.config.detailed]
 header = "{{.ShowTitle}} - {{.ShowDate}}\n{{repeat \"-\" 50}}\n"
 track = "{{printf \"%02d\" .Index}}. [{{.StartTime}}] {{.Artist}} - {{.Title}}{{if .Genre}} ({{.Genre}}){{end}}\n"
 footer = "\n{{repeat \"-\" 50}}\nBroadcast by {{.StationName}} | {{.TrackCount}} tracks played"
 `,
 			expected: struct {
-				Default   string
-				Templates map[string]TemplateConfig
+				Default string
+				Config  map[string]TemplateConfig
 			}{
 				Default: "minimal",
-				Templates: map[string]TemplateConfig{
+				Config: map[string]TemplateConfig{
 					"minimal": {
 						Header: "Tracklist:\n",
 						Track:  "{{.StartTime}} - {{.Title}} by {{.Artist}}\n",
@@ -56,15 +56,15 @@ footer = "\n{{repeat \"-\" 50}}\nBroadcast by {{.StationName}} | {{.TrackCount}}
 [templates]
 default = "simple"
 
-[templates.templates.simple]
+[templates.config.simple]
 track = "{{.StartTime}} - {{.Title}} by {{.Artist}}\n"
 `,
 			expected: struct {
-				Default   string
-				Templates map[string]TemplateConfig
+				Default string
+				Config  map[string]TemplateConfig
 			}{
 				Default: "simple",
-				Templates: map[string]TemplateConfig{
+				Config: map[string]TemplateConfig{
 					"simple": {
 						Header: "",
 						Track:  "{{.StartTime}} - {{.Title}} by {{.Artist}}\n",
@@ -80,11 +80,11 @@ track = "{{.StartTime}} - {{.Title}} by {{.Artist}}\n"
 name = "Test Station"
 `,
 			expected: struct {
-				Default   string
-				Templates map[string]TemplateConfig
+				Default string
+				Config  map[string]TemplateConfig
 			}{
-				Default:   "classic",
-				Templates: map[string]TemplateConfig{},
+				Default: "classic",
+				Config:  map[string]TemplateConfig{},
 			},
 		},
 	}
@@ -106,12 +106,12 @@ name = "Test Station"
 				t.Errorf("Templates.Default = %v, want %v", config.Templates.Default, tt.expected.Default)
 			}
 
-			if len(config.Templates.Templates) != len(tt.expected.Templates) {
-				t.Errorf("len(Templates.Templates) = %v, want %v", len(config.Templates.Templates), len(tt.expected.Templates))
+			if len(config.Templates.Config) != len(tt.expected.Config) {
+				t.Errorf("len(Templates.Config) = %v, want %v", len(config.Templates.Config), len(tt.expected.Config))
 			}
 
-			for name, expectedTemplate := range tt.expected.Templates {
-				actualTemplate, exists := config.Templates.Templates[name]
+			for name, expectedTemplate := range tt.expected.Config {
+				actualTemplate, exists := config.Templates.Config[name]
 				if !exists {
 					t.Errorf("Template %s not found in config", name)
 					continue
@@ -138,12 +138,12 @@ func TestDefaultConfigTemplates(t *testing.T) {
 		t.Errorf("Default Templates.Default = %v, want 'classic'", config.Templates.Default)
 	}
 	
-	if config.Templates.Templates == nil {
+	if config.Templates.Config == nil {
 		t.Error("Default Templates.Templates should not be nil")
 	}
 	
-	if len(config.Templates.Templates) != 0 {
-		t.Errorf("Default Templates.Templates should be empty, got %d templates", len(config.Templates.Templates))
+	if len(config.Templates.Config) != 0 {
+		t.Errorf("Default Templates.Templates should be empty, got %d templates", len(config.Templates.Config))
 	}
 }
 
@@ -153,10 +153,10 @@ func TestMergeTemplatesWithDefaults(t *testing.T) {
 	loaded := &Config{
 		Templates: struct {
 			Default   string                    `toml:"default"`
-			Templates map[string]TemplateConfig `toml:"templates"`
+			Config map[string]TemplateConfig `toml:"config"`
 		}{
 			Default: "custom",
-			Templates: map[string]TemplateConfig{
+			Config: map[string]TemplateConfig{
 				"custom": {
 					Header: "Custom Header",
 					Track:  "Custom Track: {{.Title}}",
@@ -172,11 +172,11 @@ func TestMergeTemplatesWithDefaults(t *testing.T) {
 		t.Errorf("Merged Templates.Default = %v, want 'custom'", result.Templates.Default)
 	}
 	
-	if len(result.Templates.Templates) != 1 {
-		t.Errorf("Merged Templates.Templates should have 1 template, got %d", len(result.Templates.Templates))
+	if len(result.Templates.Config) != 1 {
+		t.Errorf("Merged Templates.Templates should have 1 template, got %d", len(result.Templates.Config))
 	}
 	
-	customTemplate, exists := result.Templates.Templates["custom"]
+	customTemplate, exists := result.Templates.Config["custom"]
 	if !exists {
 		t.Error("Custom template should exist after merge")
 	} else {
@@ -206,7 +206,6 @@ cue_file_pattern = "MYR4*.cue"
 show_name_pattern = "The Newer New Wave Show - {date}"
 aliases = ["nnw", "new-wave"]
 template = "default"
-date_extraction = "MYR4(\\d{4})"
 date_format = "01/02/2006"
 enabled = true
 priority = 1
@@ -225,7 +224,6 @@ priority = 2
 					ShowNamePattern: "The Newer New Wave Show - {date}",
 					Aliases:         []string{"nnw", "new-wave"},
 					TemplateName:    "default",
-					DateExtraction:  "MYR4(\\d{4})",
 					DateFormat:      "01/02/2006",
 					Enabled:         true,
 					Priority:        1,
@@ -295,9 +293,6 @@ enabled = true
 				}
 				if actualShow.CustomTemplate != expectedShow.CustomTemplate {
 					t.Errorf("Show %s CustomTemplate = %v, want %v", name, actualShow.CustomTemplate, expectedShow.CustomTemplate)
-				}
-				if actualShow.DateExtraction != expectedShow.DateExtraction {
-					t.Errorf("Show %s DateExtraction = %v, want %v", name, actualShow.DateExtraction, expectedShow.DateExtraction)
 				}
 				if actualShow.DateFormat != expectedShow.DateFormat {
 					t.Errorf("Show %s DateFormat = %v, want %v", name, actualShow.DateFormat, expectedShow.DateFormat)
@@ -413,7 +408,7 @@ cue_file_directory = "` + filepath.Join("radio", "playout", "logs") + `"
 auto_process = true
 batch_size = 5
 
-[templates.templates.default]
+[templates.config.default]
 header = "Today's tracklist:"
 track = "{{.Time}} - {{.Title}} by {{.Artist}}"
 footer = "Thanks for listening!"
@@ -423,7 +418,6 @@ cue_file_pattern = "MYR4*.cue"
 show_name_pattern = "The Newer New Wave Show - {date}"
 aliases = ["nnw", "new-wave"]
 template = "default"
-date_extraction = "MYR4(\\d{4})"
 date_format = "01/02/2006"
 enabled = true
 priority = 1
@@ -459,8 +453,8 @@ priority = 2
 		t.Errorf("len(Shows) = %v, want 2", len(config.Shows))
 	}
 
-	if len(config.Templates.Templates) != 1 {
-		t.Errorf("len(Templates.Templates) = %v, want 1", len(config.Templates.Templates))
+	if len(config.Templates.Config) != 1 {
+		t.Errorf("len(Templates.Templates) = %v, want 1", len(config.Templates.Config))
 	}
 }
 

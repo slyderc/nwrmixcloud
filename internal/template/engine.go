@@ -82,7 +82,7 @@ func (tf *TemplateFormatter) LoadTemplates() error {
 	}
 
 	// Load each template from config
-	for name, templateConfig := range tf.config.Templates.Templates {
+	for name, templateConfig := range tf.config.Templates.Config {
 		if err := tf.loadSingleTemplate(name, templateConfig, funcMap); err != nil {
 			return fmt.Errorf("loading template %s: %w", name, err)
 		}

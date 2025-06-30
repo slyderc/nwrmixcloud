@@ -6,7 +6,9 @@ Automatically updates Mixcloud show descriptions with formatted tracklists from 
 
 - **Unified Config-Driven Architecture**: Configure multiple shows with aliases, templates, and automation
 - **Batch Processing**: Process all enabled shows automatically with priority ordering
-- **Flexible Templating**: Go text/template-based formatting with custom functions
+- **Flexible Templating**: Go text/template-based formatting with custom functions and user-friendly patterns
+- **Smart Date Handling**: Use current date or override with command line
+- **User-Friendly Formats**: Intuitive date patterns (`M/D/YYYY`) instead of Go's cryptic layouts
 - **Auto-Discovery**: CUE file pattern matching and latest file selection
 - **OAuth Integration**: Automatic Mixcloud authentication with token refresh
 - **Production Ready**: Structured logging, retry logic, and comprehensive error handling
@@ -62,7 +64,11 @@ make build-all        # Both platforms
 
 4. **Run**:
    ```bash
-   ./mixcloud-updater config.toml  # Process all enabled shows
+   # Process all enabled shows
+   ./mixcloud-updater config.toml
+   
+   # Process specific show with custom date
+   ./mixcloud-updater -show "weekly" -date "6/28/2025" config.toml
    ```
 
 ## Usage
@@ -87,12 +93,16 @@ make build-all        # Both platforms
 
 # Use custom template
 ./mixcloud-updater -show "morning" -template "detailed" config.toml
+
+# Override show date (useful for updating historical shows)
+./mixcloud-updater -show "weekly" -date "6/28/2025" config.toml
 ```
 
 ### Command Line Options
 
 - `-show string` - Process specific show by name/alias
 - `-template string` - Template name to use for formatting
+- `-date string` - Override show date (format must match show's date_format config)
 - `-dry-run` - Preview changes without updating Mixcloud
 - `-list-shows` - List available shows and their aliases
 - `-list-templates` - List available templates
@@ -131,8 +141,11 @@ batch_size = 5
 cue_file_pattern = "MYR*.cue"
 show_name_pattern = "The Newer New Wave Show - {date}"
 aliases = ["nnw", "new-wave", "newer"]
-template_name = "detailed"
-date_extraction = "MYR(\\d{4})"
+template = "detailed"
+# Date handling:
+# Use current date or -date command line override
+# Format the final date using date_format pattern
+date_format = "M/D/YYYY"  # User-friendly format patterns
 enabled = true
 priority = 1
 
@@ -153,7 +166,7 @@ priority = 2
 cue_file_pattern = "SL*.cue"
 show_name_pattern = "Sounds Like - {date}"
 aliases = ["sl", "sounds"]
-template_name = "minimal"
+template = "minimal"
 enabled = false  # Disabled show
 priority = 3
 
@@ -161,15 +174,15 @@ priority = 3
 [templates]
 default = "detailed"
 
-[templates.templates.minimal]
+[templates.config.minimal]
 track = "{{.StartTime}} - {{.Title}} by {{.Artist}}"
 
-[templates.templates.detailed]
+[templates.config.detailed]
 header = "=== {{.ShowTitle}} ===\\nPlaylist:\\n"
 track = "{{.Index}}. {{.StartTime}} - \\\"{{.Title}}\\\" by {{.Artist}}{{if .Genre}} ({{.Genre}}){{end}}"
 footer = "\\nBroadcast by {{.StationName}} | Total: {{.TrackCount}} tracks"
 
-[templates.templates.compact]
+[templates.config.compact]
 header = "Tracklist:\\n"
 track = "{{.StartTime}} {{.Artist}} - {{.Title}}"
 footer = "\\n({{.TrackCount}} tracks)"
@@ -224,12 +237,25 @@ enabled = true                             # Enable/disable processing
 priority = 1                              # Processing order (lower = first)
 
 # Template selection (choose one)
-template_name = "detailed"                 # Reference named template
+template = "detailed"                      # Reference named template
 custom_template = "{{.StartTime}} - {{.Title}}"  # Inline template
 
-# Optional date extraction
-date_extraction = "PATTERN(\\d{4})"       # Regex to extract date from filename
-date_format = "01/02/2006"                # Go time format for date formatting
+# Date handling:
+# Use current date or -date command line override
+# Format using date_format pattern
+date_format = "M/D/YYYY"                   # User-friendly date format
+```
+
+#### Date Format Patterns
+```toml
+# User-friendly format patterns (replaces Go's cryptic time layouts)
+date_format = "M/D/YYYY"    # 6/29/2025 (no leading zeros)
+date_format = "MM/DD/YYYY"  # 06/29/2025 (with leading zeros)
+date_format = "D-M-YY"      # 29-6-25
+date_format = "YYYY.MM.DD"  # 2025.06.29
+
+# Command line override (format must match show's date_format):
+# ./mixcloud-updater -show "weekly" -date "6/28/2025" config.toml
 ```
 
 #### Template System
@@ -237,7 +263,7 @@ date_format = "01/02/2006"                # Go time format for date formatting
 [templates]
 default = "template-name"  # Default template for shows
 
-[templates.templates.template-name]
+[templates.config.template-name]
 header = "Header text with {{.ShowTitle}}"           # Optional header
 track = "{{.StartTime}} - {{.Title}} by {{.Artist}}" # Required track format
 footer = "Footer with {{.TrackCount}} tracks"        # Optional footer
@@ -387,6 +413,17 @@ fi
 - Check `cue_file_pattern` matches your file naming
 - Use absolute paths in `cue_file_mapping` when needed
 - Ensure files have `.cue` extension
+
+**Date handling issues:**
+```bash
+# Test with current date
+./mixcloud-updater -show "myshow" -dry-run config.toml
+
+# Override date for historical show updates
+./mixcloud-updater -show "myshow" -date "6/28/2025" -dry-run config.toml
+```
+- Ensure `date_format` uses supported patterns: `M/D/YYYY`, `MM/DD/YYYY`, etc.
+- Command line `-date` format must match show's `date_format` configuration
 
 ### OAuth Issues
 

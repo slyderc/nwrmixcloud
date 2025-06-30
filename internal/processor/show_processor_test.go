@@ -46,11 +46,11 @@ func TestNewShowProcessor(t *testing.T) {
 			},
 		},
 		Templates: struct {
-			Default   string                    `toml:"default"`
-			Templates map[string]config.TemplateConfig `toml:"templates"`
+			Default string                    `toml:"default"`
+			Config  map[string]config.TemplateConfig `toml:"config"`
 		}{
 			Default: "default",
-			Templates: map[string]config.TemplateConfig{
+			Config: map[string]config.TemplateConfig{
 				"default": {
 					Header: "Playlist:",
 					Track:  "{{.StartTime}} - {{.Title}} by {{.Artist}}",
@@ -127,7 +127,7 @@ func TestNewShowProcessorInvalidShows(t *testing.T) {
 	}
 }
 
-func TestGenerateShowName(t *testing.T) {
+func TestGenerateShowNameLegacy(t *testing.T) {
 	cfg := &config.Config{
 		Station: struct {
 			Name             string `toml:"name"`
@@ -165,21 +165,11 @@ func TestGenerateShowName(t *testing.T) {
 			expected: "Test Station Weekly Show",
 		},
 		{
-			name: "pattern with date extraction",
+			name: "pattern with current date",
 			showCfg: &config.ShowConfig{
 				ShowNamePattern: "Show - {date}",
-				DateExtraction:  "test(\\d{4})",
 			},
-			cueFile:  "test1234.cue",
-			expected: "Show - 1234",
-		},
-		{
-			name: "pattern with date extraction no match",
-			showCfg: &config.ShowConfig{
-				ShowNamePattern: "Show - {date}",
-				DateExtraction:  "test(\\d{4})",
-			},
-			cueFile:  "other.cue",
+			cueFile:  "any_file.cue",
 			expected: "Show -", // Will use current date, but test just checks prefix
 		},
 		{
@@ -190,20 +180,11 @@ func TestGenerateShowName(t *testing.T) {
 			cueFile:   "test.cue",
 			wantError: true,
 		},
-		{
-			name: "invalid regex",
-			showCfg: &config.ShowConfig{
-				ShowNamePattern: "Show - {date}",
-				DateExtraction:  "[invalid",
-			},
-			cueFile:   "test.cue",
-			wantError: true,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := processor.generateShowName(tt.showCfg, tt.cueFile)
+			result, err := processor.generateShowName(tt.showCfg, tt.cueFile, "")
 
 			if tt.wantError {
 				if err == nil {
@@ -277,13 +258,13 @@ func TestProcessShowValidation(t *testing.T) {
 	}
 
 	// Test non-existent show
-	err = processor.ProcessShow("non-existent", "", true)
+	err = processor.ProcessShow("non-existent", "", "", true)
 	if err == nil {
 		t.Error("ProcessShow() should return error for non-existent show")
 	}
 
 	// Test disabled show (should not error, but should skip)
-	err = processor.ProcessShow("disabled-show", "", true)
+	err = processor.ProcessShow("disabled-show", "", "", true)
 	if err != nil {
 		t.Errorf("ProcessShow() unexpected error for disabled show = %v", err)
 	}

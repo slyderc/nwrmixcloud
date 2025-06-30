@@ -28,7 +28,8 @@
       "Bash(./bin/mixcloud-updater-macos:*)",
       "mcp__taskmaster-ai__add_task",
       "mcp__taskmaster-ai__expand_task",
-      "mcp__taskmaster-ai__analyze_project_complexity"
+      "mcp__taskmaster-ai__analyze_project_complexity",
+      "Bash(bin/mixcloud-updater-macos:*)"
     ],
     "deny": []
   }

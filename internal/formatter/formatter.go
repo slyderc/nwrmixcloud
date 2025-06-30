@@ -63,7 +63,7 @@ func NewFormatterWithConfig(cfg *config.Config) *Formatter {
 	}
 	
 	// Initialize template formatter if templates are configured
-	if cfg != nil && len(cfg.Templates.Templates) > 0 {
+	if cfg != nil && len(cfg.Templates.Config) > 0 {
 		templateFormatter := template.NewTemplateFormatter(cfg)
 		if err := templateFormatter.LoadTemplates(); err == nil {
 			formatter.templateFormatter = templateFormatter

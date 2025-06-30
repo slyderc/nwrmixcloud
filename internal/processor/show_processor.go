@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -120,7 +118,7 @@ func NewShowProcessor(cfg *config.Config, configPath string) (*ShowProcessor, er
 }
 
 // ProcessShow processes a single show by name or alias
-func (sp *ShowProcessor) ProcessShow(nameOrAlias string, templateOverride string, dryRun bool) error {
+func (sp *ShowProcessor) ProcessShow(nameOrAlias string, templateOverride string, dateOverride string, dryRun bool) error {
 	startTime := time.Now()
 	
 	fmt.Printf("Processing show: %s\n", nameOrAlias)
@@ -142,7 +140,7 @@ func (sp *ShowProcessor) ProcessShow(nameOrAlias string, templateOverride string
 	}
 
 	// Process the show
-	result := sp.processingleShow(showKey, showCfg, templateOverride, dryRun)
+	result := sp.processingleShow(showKey, showCfg, templateOverride, dateOverride, dryRun)
 	result.Duration = time.Since(startTime)
 
 	// Print results
@@ -199,7 +197,7 @@ func (sp *ShowProcessor) ProcessAllShows(dryRun bool) error {
 
 		for _, showKey := range batch {
 			showCfg := sp.config.Shows[showKey]
-			result := sp.processingleShow(showKey, &showCfg, "", dryRun)
+			result := sp.processingleShow(showKey, &showCfg, "", "", dryRun)
 			
 			batchResult.Results = append(batchResult.Results, result)
 			batchResult.ProcessedShows++
@@ -239,7 +237,7 @@ func (sp *ShowProcessor) ProcessAllShows(dryRun bool) error {
 }
 
 // processingleShow handles the core processing logic for a single show
-func (sp *ShowProcessor) processingleShow(showKey string, showCfg *config.ShowConfig, templateOverride string, dryRun bool) ProcessingResult {
+func (sp *ShowProcessor) processingleShow(showKey string, showCfg *config.ShowConfig, templateOverride string, dateOverride string, dryRun bool) ProcessingResult {
 	result := ProcessingResult{
 		ShowKey:  showKey,
 		DryRun:   dryRun,
@@ -321,7 +319,7 @@ func (sp *ShowProcessor) processingleShow(showKey string, showCfg *config.ShowCo
 	}
 
 	// Generate show name with date substitution
-	showName, err := sp.generateShowName(showCfg, cueFile)
+	showName, err := sp.generateShowName(showCfg, cueFile, dateOverride)
 	if err != nil {
 		sp.logger.Error("Show name generation failed",
 			slog.String("show_key", showKey),
@@ -420,43 +418,93 @@ func (sp *ShowProcessor) processingleShow(showKey string, showCfg *config.ShowCo
 }
 
 // generateShowName generates the final show name with date substitution
-func (sp *ShowProcessor) generateShowName(showCfg *config.ShowConfig, cueFile string) (string, error) {
+func (sp *ShowProcessor) generateShowName(showCfg *config.ShowConfig, cueFile string, dateOverride string) (string, error) {
 	showName := showCfg.ShowNamePattern
 	if showName == "" {
 		return "", fmt.Errorf("show_name_pattern is required")
 	}
 
-	// Extract date from filename if configured
-	if showCfg.DateExtraction != "" {
-		re, err := regexp.Compile(showCfg.DateExtraction)
-		if err != nil {
-			return "", fmt.Errorf("invalid date extraction regex: %w", err)
-		}
-
-		filename := filepath.Base(cueFile)
-		matches := re.FindStringSubmatch(filename)
-		if len(matches) > 1 {
-			extractedDate := matches[1]
-			
-			// Format date if needed
-			if showCfg.DateFormat != "" {
-				// For now, use the extracted date as-is
-				// TODO: Add proper date parsing and formatting
-				showName = strings.ReplaceAll(showName, "{date}", extractedDate)
-			} else {
-				showName = strings.ReplaceAll(showName, "{date}", extractedDate)
+	// Date handling with simple priority:
+	// 1. Command line date override (if provided)
+	// 2. Current date (default)
+	
+	var finalDate string
+	
+	if dateOverride != "" {
+		// Parse the date override and reformat according to show's date_format
+		if showCfg.DateFormat != "" {
+			// Try to parse the input date using various common formats
+			parsedDate, err := sp.parseFlexibleDate(dateOverride)
+			if err != nil {
+				return "", fmt.Errorf("invalid date format '%s': %w", dateOverride, err)
 			}
+			goLayout := sp.convertDateFormatToGoLayout(showCfg.DateFormat)
+			finalDate = parsedDate.Format(goLayout)
 		} else {
-			// No date found, use current date
-			currentDate := time.Now().Format("01/02/2006")
-			showName = strings.ReplaceAll(showName, "{date}", currentDate)
+			// No format specified, use the override as-is
+			finalDate = dateOverride
+		}
+	} else {
+		// Use current date with configured format
+		if showCfg.DateFormat != "" {
+			goLayout := sp.convertDateFormatToGoLayout(showCfg.DateFormat)
+			finalDate = time.Now().Format(goLayout)
+		} else {
+			finalDate = time.Now().Format("01/02/2006")
 		}
 	}
+	
+	// Replace the {date} placeholder with the final date
+	showName = strings.ReplaceAll(showName, "{date}", finalDate)
 
 	// Replace other placeholders
 	showName = strings.ReplaceAll(showName, "{station}", sp.config.Station.Name)
 
 	return showName, nil
+}
+
+
+// convertDateFormatToGoLayout converts user-friendly date formats to Go time layouts
+func (sp *ShowProcessor) convertDateFormatToGoLayout(userFormat string) string {
+	// Replace user-friendly patterns with Go time reference patterns
+	replacer := strings.NewReplacer(
+		"YYYY", "2006",  // 4-digit year
+		"YY", "06",      // 2-digit year
+		"MM", "01",      // 2-digit month with leading zero
+		"M", "1",        // 1-2 digit month without leading zero
+		"DD", "02",      // 2-digit day with leading zero
+		"D", "2",        // 1-2 digit day without leading zero
+	)
+	
+	return replacer.Replace(userFormat)
+}
+
+// parseFlexibleDate attempts to parse a date string using various common formats
+func (sp *ShowProcessor) parseFlexibleDate(dateStr string) (time.Time, error) {
+	// Try various common date formats
+	formats := []string{
+		"1/2/2006",      // M/D/YYYY
+		"01/02/2006",    // MM/DD/YYYY
+		"2006-01-02",    // YYYY-MM-DD
+		"2006_01_02",    // YYYY_MM_DD
+		"20060102",      // YYYYMMDD
+		"2-1-2006",      // D-M-YYYY
+		"02-01-2006",    // DD-MM-YYYY
+		"2006.01.02",    // YYYY.MM.DD
+		"Jan 2, 2006",   // Mon D, YYYY
+		"January 2, 2006", // Month D, YYYY
+		"2/1/2006",      // D/M/YYYY
+		"02/01/2006",    // DD/MM/YYYY
+		"2006/01/02",    // YYYY/MM/DD
+	}
+	
+	for _, format := range formats {
+		if parsedDate, err := time.Parse(format, dateStr); err == nil {
+			return parsedDate, nil
+		}
+	}
+	
+	return time.Time{}, fmt.Errorf("unable to parse date string '%s' - try formats like MM/DD/YYYY, M/D/YYYY, or YYYYMMDD", dateStr)
 }
 
 // printSingleResult displays results for single show processing

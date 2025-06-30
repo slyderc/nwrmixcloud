@@ -44,7 +44,6 @@ func (t Track) IsEmpty() bool {
 // CueSheet represents the complete parsed CUE file
 type CueSheet struct {
 	Title     string   `json:"title"`      // Album/show title
-	Date      string   `json:"date"`       // Album/show date
 	Performer string   `json:"performer"`  // Album/show performer/artist
 	Genre     string   `json:"genre"`      // Album/show genre
 	Files     []string `json:"files"`      // Referenced audio files
@@ -58,9 +57,6 @@ func (c CueSheet) String() string {
 		sb.WriteString(fmt.Sprintf("CueSheet: %s", c.Title))
 	} else {
 		sb.WriteString("CueSheet: (untitled)")
-	}
-	if c.Date != "" {
-		sb.WriteString(fmt.Sprintf(" (%s)", c.Date))
 	}
 	sb.WriteString(fmt.Sprintf(" - %d tracks", len(c.Tracks)))
 	return sb.String()
@@ -285,7 +281,6 @@ type trackParser struct {
 	tracks          []Track
 	albumPerformer  string
 	albumTitle      string
-	albumDate       string
 	albumGenre      string
 	files           []string
 	inTrackSection  bool // true after first TRACK command
@@ -468,10 +463,6 @@ func (tp *trackParser) handleRemCommand(line ParsedLine) error {
 			// Album-level genre
 			tp.albumGenre = value
 		}
-	case "DATE":
-		if !tp.inTrackSection {
-			tp.albumDate = value
-		}
 	case "COMMENT":
 		// Skip comments - they're just metadata
 		return nil
@@ -501,7 +492,6 @@ func (tp *trackParser) finish() *CueSheet {
 
 	return &CueSheet{
 		Title:     tp.albumTitle,
-		Date:      tp.albumDate,
 		Performer: tp.albumPerformer,
 		Genre:     tp.albumGenre,
 		Files:     tp.files,

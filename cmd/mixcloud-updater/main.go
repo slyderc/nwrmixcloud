@@ -19,6 +19,7 @@ var (
 	configFile  = flag.String("config", "config.toml", "Path to the configuration file")
 	showAlias   = flag.String("show", "", "Process specific show by name/alias (optional)")
 	templateName = flag.String("template", "", "Template name to use for formatting (optional)")
+	dateOverride = flag.String("date", "", "Override date for show (format must match show's date_format config)")
 	dryRun      = flag.Bool("dry-run", false, "Preview changes without updating Mixcloud")
 	showVersion = flag.Bool("version", false, "Show version information")
 	help        = flag.Bool("help", false, "Show help information")
@@ -42,6 +43,8 @@ func init() {
 		fmt.Fprintf(os.Stderr, "\n  # Process specific show by alias\n")
 		fmt.Fprintf(os.Stderr, "  %s -show nnw config.toml\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s -show \"newer-new-wave\" config.toml\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "\n  # Override show date (format must match show's date_format)\n")
+		fmt.Fprintf(os.Stderr, "  %s -show nnw -date \"6/28/2025\" config.toml\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "\n  # Preview without updating\n")
 		fmt.Fprintf(os.Stderr, "  %s -dry-run config.toml\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  %s -show sounds-like -dry-run config.toml\n", os.Args[0])
@@ -290,7 +293,7 @@ func main() {
 	// Execute processing based on arguments
 	if *showAlias != "" {
 		// Process specific show
-		if err := showProcessor.ProcessShow(*showAlias, *templateName, *dryRun); err != nil {
+		if err := showProcessor.ProcessShow(*showAlias, *templateName, *dateOverride, *dryRun); err != nil {
 			fmt.Fprintf(os.Stderr, "Error processing show: %v\n", err)
 			handleAuthError(err)
 			os.Exit(1)
@@ -371,9 +374,9 @@ func listAvailableTemplates(cfg *config.Config) error {
 	fmt.Printf("Available Templates:\n")
 	fmt.Printf("===================\n\n")
 
-	if len(cfg.Templates.Templates) == 0 {
+	if len(cfg.Templates.Config) == 0 {
 		fmt.Printf("No templates configured in config file.\n")
-		fmt.Printf("Add template configurations to the [templates.templates] section.\n")
+		fmt.Printf("Add template configurations to the [templates.config] section.\n")
 		return nil
 	}
 
@@ -382,7 +385,7 @@ func listAvailableTemplates(cfg *config.Config) error {
 		defaultTemplate = "classic"
 	}
 
-	for name, templateCfg := range cfg.Templates.Templates {
+	for name, templateCfg := range cfg.Templates.Config {
 		isDefault := ""
 		if name == defaultTemplate {
 			isDefault = " (default)"

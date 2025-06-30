@@ -31,10 +31,10 @@ func TestLoadTemplates(t *testing.T) {
 	cfg := &config.Config{
 		Templates: struct {
 			Default   string                    `toml:"default"`
-			Templates map[string]config.TemplateConfig `toml:"templates"`
+			Config map[string]config.TemplateConfig `toml:"config"`
 		}{
 			Default: "minimal",
-			Templates: map[string]config.TemplateConfig{
+			Config: map[string]config.TemplateConfig{
 				"minimal": {
 					Header: "Tracklist:",
 					Track:  "{{.StartTime}} - {{.Title}} by {{.Artist}}",
@@ -74,9 +74,9 @@ func TestLoadTemplatesWithMissingTrack(t *testing.T) {
 	cfg := &config.Config{
 		Templates: struct {
 			Default   string                    `toml:"default"`
-			Templates map[string]config.TemplateConfig `toml:"templates"`
+			Config map[string]config.TemplateConfig `toml:"config"`
 		}{
-			Templates: map[string]config.TemplateConfig{
+			Config: map[string]config.TemplateConfig{
 				"invalid": {
 					Header: "Header only",
 					Footer: "Footer only",
@@ -108,9 +108,9 @@ func TestFormatWithTemplate(t *testing.T) {
 		},
 		Templates: struct {
 			Default   string                    `toml:"default"`
-			Templates map[string]config.TemplateConfig `toml:"templates"`
+			Config map[string]config.TemplateConfig `toml:"config"`
 		}{
-			Templates: map[string]config.TemplateConfig{
+			Config: map[string]config.TemplateConfig{
 				"simple": {
 					Header: "Playlist:\n",
 					Track:  "{{.StartTime}} - {{.Title}} by {{.Artist}}\n",
@@ -190,9 +190,9 @@ func TestValidateTemplate(t *testing.T) {
 	cfg := &config.Config{
 		Templates: struct {
 			Default   string                    `toml:"default"`
-			Templates map[string]config.TemplateConfig `toml:"templates"`
+			Config map[string]config.TemplateConfig `toml:"config"`
 		}{
-			Templates: map[string]config.TemplateConfig{
+			Config: map[string]config.TemplateConfig{
 				"valid": {
 					Header: "Header: {{.ShowTitle}}",
 					Track:  "{{.StartTime}} - {{.Title}}",
@@ -228,9 +228,9 @@ func TestTemplateFunctions(t *testing.T) {
 	cfg := &config.Config{
 		Templates: struct {
 			Default   string                    `toml:"default"`
-			Templates map[string]config.TemplateConfig `toml:"templates"`
+			Config map[string]config.TemplateConfig `toml:"config"`
 		}{
-			Templates: map[string]config.TemplateConfig{
+			Config: map[string]config.TemplateConfig{
 				"functions": {
 					Track: "{{upper .Artist}} - {{lower .Title}} ({{truncate .Genre 3}})",
 				},
@@ -271,9 +271,9 @@ func TestCharacterLimitEnforcement(t *testing.T) {
 	cfg := &config.Config{
 		Templates: struct {
 			Default   string                    `toml:"default"`
-			Templates map[string]config.TemplateConfig `toml:"templates"`
+			Config map[string]config.TemplateConfig `toml:"config"`
 		}{
-			Templates: map[string]config.TemplateConfig{
+			Config: map[string]config.TemplateConfig{
 				"long": {
 					Track: "{{repeat \"Very long track description that exceeds normal length \" 10}}{{.Title}}\n",
 				},
@@ -322,9 +322,9 @@ func TestSmartTruncationWithFooter(t *testing.T) {
 		},
 		Templates: struct {
 			Default   string                    `toml:"default"`
-			Templates map[string]config.TemplateConfig `toml:"templates"`
+			Config map[string]config.TemplateConfig `toml:"config"`
 		}{
-			Templates: map[string]config.TemplateConfig{
+			Config: map[string]config.TemplateConfig{
 				"truncation_test": {
 					Header: "Show Playlist:\n",
 					Track:  "{{.Index}}. {{.StartTime}} - \"{{.Title}}\" by {{.Artist}} ({{repeat \"X\" 50}})\n",
@@ -389,9 +389,9 @@ func TestListTemplates(t *testing.T) {
 	cfg := &config.Config{
 		Templates: struct {
 			Default   string                    `toml:"default"`
-			Templates map[string]config.TemplateConfig `toml:"templates"`
+			Config map[string]config.TemplateConfig `toml:"config"`
 		}{
-			Templates: map[string]config.TemplateConfig{
+			Config: map[string]config.TemplateConfig{
 				"template1": {Track: "{{.Title}}"},
 				"template2": {Track: "{{.Artist}}"},
 			},
@@ -434,7 +434,7 @@ func TestGetDefaultTemplateName(t *testing.T) {
 	cfg := &config.Config{
 		Templates: struct {
 			Default   string                    `toml:"default"`
-			Templates map[string]config.TemplateConfig `toml:"templates"`
+			Config map[string]config.TemplateConfig `toml:"config"`
 		}{
 			Default: "custom_default",
 		},
@@ -582,10 +582,10 @@ func TestSelectTemplateForShow(t *testing.T) {
 	cfg := &config.Config{
 		Templates: struct {
 			Default   string                    `toml:"default"`
-			Templates map[string]config.TemplateConfig `toml:"templates"`
+			Config map[string]config.TemplateConfig `toml:"config"`
 		}{
 			Default: "default-template",
-			Templates: map[string]config.TemplateConfig{
+			Config: map[string]config.TemplateConfig{
 				"default-template": {
 					Track: "{{.Title}} by {{.Artist}}",
 				},
@@ -681,9 +681,9 @@ func TestFormatWithShowConfig(t *testing.T) {
 		},
 		Templates: struct {
 			Default   string                    `toml:"default"`
-			Templates map[string]config.TemplateConfig `toml:"templates"`
+			Config map[string]config.TemplateConfig `toml:"config"`
 		}{
-			Templates: map[string]config.TemplateConfig{
+			Config: map[string]config.TemplateConfig{
 				"test-template": {
 					Header: "Playlist:\n",
 					Track:  "{{.Index}}. {{.Title}} by {{.Artist}}\n",
@@ -736,9 +736,9 @@ func TestGetTemplateInfo(t *testing.T) {
 	cfg := &config.Config{
 		Templates: struct {
 			Default   string                    `toml:"default"`
-			Templates map[string]config.TemplateConfig `toml:"templates"`
+			Config map[string]config.TemplateConfig `toml:"config"`
 		}{
-			Templates: map[string]config.TemplateConfig{
+			Config: map[string]config.TemplateConfig{
 				"complete": {
 					Header: "Header",
 					Track:  "Track",
