@@ -6,111 +6,95 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/nowwaveradio/mixcloud-updater/internal/config"
-	"github.com/nowwaveradio/mixcloud-updater/internal/cue"
-	"github.com/nowwaveradio/mixcloud-updater/internal/filter"
-	"github.com/nowwaveradio/mixcloud-updater/internal/formatter"
 	"github.com/nowwaveradio/mixcloud-updater/internal/mixcloud"
+	"github.com/nowwaveradio/mixcloud-updater/internal/processor"
+	"github.com/nowwaveradio/mixcloud-updater/internal/shows"
 )
 
 const version = "1.0.0"
 
 var (
-	cueFile    = flag.String("cue-file", "", "Path to the CUE file to parse (required)")
-	configFile = flag.String("config", "config.toml", "Path to the configuration file")
-	showName   = flag.String("show-name", "", "Name of the show to update on Mixcloud (required)")
-	dryRun     = flag.Bool("dry-run", false, "Preview changes without updating Mixcloud")
+	configFile  = flag.String("config", "config.toml", "Path to the configuration file")
+	showAlias   = flag.String("show", "", "Process specific show by name/alias (optional)")
+	templateName = flag.String("template", "", "Template name to use for formatting (optional)")
+	dryRun      = flag.Bool("dry-run", false, "Preview changes without updating Mixcloud")
 	showVersion = flag.Bool("version", false, "Show version information")
-	help       = flag.Bool("help", false, "Show help information")
+	help        = flag.Bool("help", false, "Show help information")
+	listShows   = flag.Bool("list-shows", false, "List available shows and their aliases")
+	listTemplates = flag.Bool("list-templates", false, "List available templates")
 )
 
 func init() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Mixcloud Updater v%s\n\n", version)
-		fmt.Fprintf(os.Stderr, "Automatically updates Mixcloud show descriptions with formatted tracklists from CUE files.\n\n")
-		fmt.Fprintf(os.Stderr, "Usage: %s [OPTIONS]\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "Required flags:\n")
-		fmt.Fprintf(os.Stderr, "  -cue-file string\n        Path to the CUE file to parse\n")
-		fmt.Fprintf(os.Stderr, "  -show-name string\n        Name of the show to update on Mixcloud\n\n")
-		fmt.Fprintf(os.Stderr, "Optional flags:\n")
+		fmt.Fprintf(os.Stderr, "Automatically updates Mixcloud show descriptions with formatted tracklists from CUE files.\n")
+		fmt.Fprintf(os.Stderr, "Uses a unified config-driven architecture for batch and single-show processing.\n\n")
+		fmt.Fprintf(os.Stderr, "Usage:\n")
+		fmt.Fprintf(os.Stderr, "  %s [config.toml]                    # Process all enabled shows\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s [OPTIONS] [config.toml]          # Process with options\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Options:\n")
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
-		fmt.Fprintf(os.Stderr, "  # Update a show\n")
-		fmt.Fprintf(os.Stderr, "  %s -cue-file MYR04137.cue -show-name \"The Newer New Wave Show\"\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # Process all enabled shows from config\n")
+		fmt.Fprintf(os.Stderr, "  %s config.toml\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "\n  # Process specific show by alias\n")
+		fmt.Fprintf(os.Stderr, "  %s -show nnw config.toml\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -show \"newer-new-wave\" config.toml\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "\n  # Preview without updating\n")
-		fmt.Fprintf(os.Stderr, "  %s -cue-file MYR04137.cue -show-name \"The Newer New Wave Show\" -dry-run\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "\n  # Automation with cron\n")
-		fmt.Fprintf(os.Stderr, "  0 */2 * * * /path/to/mixcloud-updater -cue-file /shows/latest.cue -show-name \"Weekly Show\"\n")
-		fmt.Fprintf(os.Stderr, "\n  # Batch processing\n")
-		fmt.Fprintf(os.Stderr, "  for f in *.cue; do %s -cue-file \"$f\" -show-name \"Show $(date +%%m-%%d-%%Y)\"; done\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -dry-run config.toml\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -show sounds-like -dry-run config.toml\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "\n  # List available shows and templates\n")
+		fmt.Fprintf(os.Stderr, "  %s -list-shows config.toml\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  %s -list-templates config.toml\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "\n  # Use specific template override\n")
+		fmt.Fprintf(os.Stderr, "  %s -show morning -template detailed config.toml\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "\n  # Automation with cron (process all shows)\n")
+		fmt.Fprintf(os.Stderr, "  0 */2 * * * /path/to/mixcloud-updater /path/to/config.toml\n")
 	}
 }
 
-// validateArguments performs comprehensive validation of command-line arguments and file accessibility
-func validateArguments() error {
-	// Check required arguments
-	if *cueFile == "" {
-		return fmt.Errorf("--cue-file is required")
-	}
-
-	if *showName == "" {
-		return fmt.Errorf("--show-name is required")
-	}
-
-	// Validate and check CUE file
-	if err := validateCueFile(*cueFile); err != nil {
-		return fmt.Errorf("CUE file validation failed: %w", err)
-	}
-
+// validateArguments performs comprehensive validation of command-line arguments
+func validateArguments(configFilePath string) error {
 	// Validate and check config file
-	if err := validateConfigFile(*configFile); err != nil {
+	if err := validateConfigFile(configFilePath); err != nil {
 		return fmt.Errorf("config file validation failed: %w", err)
 	}
 
-	// Validate show name format
-	if err := validateShowName(*showName); err != nil {
-		return fmt.Errorf("show name validation failed: %w", err)
-	}
-
-	return nil
-}
-
-// validateCueFile checks if the CUE file exists and is readable
-func validateCueFile(filePath string) error {
-	// Clean and resolve the path to handle platform differences
-	cleanPath := filepath.Clean(filePath)
-	
-	// Check if file exists
-	info, err := os.Stat(cleanPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("CUE file does not exist: %s", cleanPath)
+	// Validate show alias format if provided
+	if *showAlias != "" {
+		if err := validateShowAlias(*showAlias); err != nil {
+			return fmt.Errorf("show alias validation failed: %w", err)
 		}
-		return fmt.Errorf("cannot access CUE file: %w", err)
-	}
-
-	// Check if it's a regular file (not a directory)
-	if info.IsDir() {
-		return fmt.Errorf("CUE file path is a directory, not a file: %s", cleanPath)
-	}
-
-	// Check if file is readable
-	file, err := os.Open(cleanPath)
-	if err != nil {
-		return fmt.Errorf("CUE file is not readable: %w", err)
-	}
-	file.Close()
-
-	// Check file extension (case-insensitive)
-	ext := strings.ToLower(filepath.Ext(cleanPath))
-	if ext != ".cue" {
-		return fmt.Errorf("file does not have .cue extension: %s (got %s)", cleanPath, ext)
 	}
 
 	return nil
 }
+
+// validateShowAlias checks if the show alias format is valid  
+func validateShowAlias(alias string) error {
+	// Check if show alias is not just whitespace
+	trimmed := strings.TrimSpace(alias)
+	if trimmed == "" {
+		return fmt.Errorf("show alias cannot be empty or just whitespace")
+	}
+
+	// Check reasonable length limits
+	if len(trimmed) < 1 {
+		return fmt.Errorf("show alias too short (minimum 1 character): %q", trimmed)
+	}
+
+	if len(trimmed) > 50 {
+		return fmt.Errorf("show alias too long (maximum 50 characters): %q", trimmed)
+	}
+
+	// Update the global variable to use the trimmed version
+	*showAlias = trimmed
+
+	return nil
+}
+
 
 // validateConfigFile checks if the config file exists or can be created
 func validateConfigFile(filePath string) error {
@@ -148,28 +132,6 @@ func validateConfigFile(filePath string) error {
 	return nil
 }
 
-// validateShowName checks if the show name format is valid
-func validateShowName(name string) error {
-	// Check if show name is not just whitespace
-	trimmed := strings.TrimSpace(name)
-	if trimmed == "" {
-		return fmt.Errorf("show name cannot be empty or just whitespace")
-	}
-
-	// Check reasonable length limits
-	if len(trimmed) < 2 {
-		return fmt.Errorf("show name too short (minimum 2 characters): %q", trimmed)
-	}
-
-	if len(trimmed) > 100 {
-		return fmt.Errorf("show name too long (maximum 100 characters): %q", trimmed)
-	}
-
-	// Update the global variable to use the trimmed version
-	*showName = trimmed
-
-	return nil
-}
 
 // loadConfiguration loads and validates the configuration file with automatic OAuth if needed
 func loadConfiguration(configPath string) (*config.Config, error) {
@@ -257,144 +219,6 @@ func needsAuthorization(cfg *config.Config) bool {
 
 
 
-// WorkflowResult contains the results of workflow execution for reporting
-type WorkflowResult struct {
-	ParsedTracks    int
-	FilteredTracks  int
-	ExcludedTracks  int
-	FormattedLength int
-	ShowURL         string
-	DryRun          bool
-	Success         bool
-	TotalDuration   time.Duration
-	StepDurations   map[string]time.Duration
-}
-
-// executeWorkflow orchestrates the main application workflow
-func executeWorkflow(cfg *config.Config, cueFilePath, showName string, dryRun bool) error {
-	startTime := time.Now()
-	stepDurations := make(map[string]time.Duration)
-	result := &WorkflowResult{
-		DryRun:        dryRun,
-		StepDurations: stepDurations,
-	}
-	// Parse CUE file
-	fmt.Printf("Parsing CUE file...\n")
-	stepStart := time.Now()
-	cueSheet, err := cue.ParseCueFile(cueFilePath)
-	if err != nil {
-		return fmt.Errorf("failed to parse CUE file: %w", err)
-	}
-	stepDurations["parse"] = time.Since(stepStart)
-	result.ParsedTracks = len(cueSheet.Tracks)
-
-	// Initialize content filter
-	stepStart = time.Now()
-	trackFilter, err := filter.NewFilter(cfg)
-	if err != nil {
-		return fmt.Errorf("failed to initialize content filter: %w", err)
-	}
-	stepDurations["filter_init"] = time.Since(stepStart)
-
-	// Filter tracks
-	fmt.Printf("Filtering tracks...\n")
-	stepStart = time.Now()
-	var filteredTracks []cue.Track
-	originalCount := len(cueSheet.Tracks)
-	
-	for _, track := range cueSheet.Tracks {
-		if trackFilter.ShouldIncludeTrack(&track) {
-			filteredTracks = append(filteredTracks, track)
-		}
-	}
-	
-	filteredCount := len(filteredTracks)
-	excludedCount := originalCount - filteredCount
-	stepDurations["filter"] = time.Since(stepStart)
-	result.FilteredTracks = filteredCount
-	result.ExcludedTracks = excludedCount
-
-	if filteredCount == 0 {
-		return fmt.Errorf("no tracks remaining after filtering - check your filter configuration")
-	}
-
-	// Format tracklist
-	stepStart = time.Now()
-	trackFormatter := formatter.NewFormatter()
-	formattedTracklist := trackFormatter.FormatTracklist(filteredTracks, trackFilter)
-	stepDurations["format"] = time.Since(stepStart)
-	result.FormattedLength = len(formattedTracklist)
-
-	// Initialize Mixcloud client
-	stepStart = time.Now()
-	client, err := mixcloud.NewClient(cfg, filepath.Clean(*configFile))
-	if err != nil {
-		return fmt.Errorf("failed to initialize Mixcloud client: %w", err)
-	}
-	stepDurations["client_init"] = time.Since(stepStart)
-
-	// Generate show URL and get show info
-	fmt.Printf("Locating Mixcloud show...\n")
-	stepStart = time.Now()
-	showURL := mixcloud.GenerateShowURL(cfg.Station.MixcloudUsername, showName)
-	result.ShowURL = showURL
-
-	if !dryRun {
-		// Verify the show exists
-		_, err := client.GetShow(showURL)
-		if err != nil {
-			return fmt.Errorf("failed to get show information: %w", err)
-		}
-	}
-	stepDurations["show_lookup"] = time.Since(stepStart)
-
-	// Update show description
-	fmt.Printf("Updating show description...\n")
-	stepStart = time.Now()
-	if dryRun {
-		fmt.Printf("\nDRY RUN - Would update with:\n")
-		fmt.Printf("─────────────────────────────────────────\n")
-		fmt.Printf("%s\n", formattedTracklist)
-		fmt.Printf("─────────────────────────────────────────\n")
-	} else {
-		err := client.UpdateShowDescription(showURL, formattedTracklist)
-		if err != nil {
-			return fmt.Errorf("failed to update show description: %w", err)
-		}
-	}
-	stepDurations["update"] = time.Since(stepStart)
-
-	// Calculate total duration and mark as successful
-	result.TotalDuration = time.Since(startTime)
-	result.Success = true
-
-	// Print final summary
-	printWorkflowSummary(result)
-
-	return nil
-}
-
-// printWorkflowSummary displays a comprehensive summary of the workflow execution
-func printWorkflowSummary(result *WorkflowResult) {
-	fmt.Printf("\n")
-	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-	fmt.Printf("Summary: %d/%d tracks included (%.0f%%) • %.1fs\n", 
-		result.FilteredTracks, result.ParsedTracks,
-		float64(result.FilteredTracks) / float64(result.ParsedTracks) * 100,
-		result.TotalDuration.Seconds())
-	
-	if result.ShowURL != "" {
-		fmt.Printf("Show: %s\n", result.ShowURL)
-	}
-	
-	// Final message
-	if result.DryRun {
-		fmt.Printf("\nDry run complete. To apply changes, run again without --dry-run\n")
-	} else if result.Success {
-		fmt.Printf("\n✓ Show description updated on Mixcloud!\n")
-	}
-	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-}
 
 func main() {
 	flag.Parse()
@@ -410,45 +234,199 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Determine config file path - support single positional argument
+	configFilePath := *configFile
+	if flag.NArg() == 1 {
+		configFilePath = flag.Arg(0)
+	} else if flag.NArg() > 1 {
+		fmt.Fprintf(os.Stderr, "Error: Too many arguments. Expected at most one config file path.\n\n")
+		flag.Usage()
+		os.Exit(1)
+	}
+
 	// Print banner
 	fmt.Printf("Mixcloud Updater v%s\n", version)
 	fmt.Printf("=================================\n\n")
 
-	// Validate required arguments
-	if err := validateArguments(); err != nil {
+	// Validate arguments
+	if err := validateArguments(configFilePath); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n\n", err)
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	// Print configuration
-	fmt.Printf("Configuration:\n")
-	fmt.Printf("  CUE File: %s\n", *cueFile)
-	fmt.Printf("  Show Name: %s\n", *showName)
-	fmt.Printf("  Config: %s\n", *configFile)
-	fmt.Printf("  Dry Run: %t\n\n", *dryRun)
-
-	// Load configuration from file
-	fmt.Printf("Loading configuration...\n")
-	cfg, err := loadConfiguration(*configFile)
+	// Load configuration
+	fmt.Printf("Loading configuration: %s\n", configFilePath)
+	cfg, err := loadConfiguration(configFilePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("Configuration loaded.\n\n")
 
-	// Execute the main workflow
-	if err := executeWorkflow(cfg, *cueFile, *showName, *dryRun); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		
-		// Check if this is an authentication error
-		errStr := err.Error()
-		if strings.Contains(errStr, "authentication") || strings.Contains(errStr, "unauthorized") || 
-		   strings.Contains(errStr, "token has expired") || strings.Contains(errStr, "OAuthException") {
-			fmt.Fprintf(os.Stderr, "\nYour OAuth tokens have expired. Please run the command again to re-authenticate.\n")
+	// Handle list operations
+	if *listShows {
+		if err := listAvailableShows(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error listing shows: %v\n", err)
+			os.Exit(1)
 		}
+		os.Exit(0)
+	}
+
+	if *listTemplates {
+		if err := listAvailableTemplates(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error listing templates: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	// Create show processor  
+	showProcessor, err := processor.NewShowProcessor(cfg, configFilePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error initializing processor: %v\n", err)
 		os.Exit(1)
 	}
 
+	// Execute processing based on arguments
+	if *showAlias != "" {
+		// Process specific show
+		if err := showProcessor.ProcessShow(*showAlias, *templateName, *dryRun); err != nil {
+			fmt.Fprintf(os.Stderr, "Error processing show: %v\n", err)
+			handleAuthError(err)
+			os.Exit(1)
+		}
+	} else {
+		// Process all enabled shows
+		if err := showProcessor.ProcessAllShows(*dryRun); err != nil {
+			fmt.Fprintf(os.Stderr, "Error processing shows: %v\n", err)
+			handleAuthError(err)
+			os.Exit(1)
+		}
+	}
+
 	fmt.Println("✓ Done!")
+}
+
+// handleAuthError provides helpful messages for authentication errors
+func handleAuthError(err error) {
+	errStr := err.Error()
+	if strings.Contains(errStr, "authentication") || strings.Contains(errStr, "unauthorized") || 
+	   strings.Contains(errStr, "token has expired") || strings.Contains(errStr, "OAuthException") {
+		fmt.Fprintf(os.Stderr, "\nYour OAuth tokens have expired. Please run the command again to re-authenticate.\n")
+	}
+}
+
+// listAvailableShows displays all configured shows and their aliases
+func listAvailableShows(cfg *config.Config) error {
+	resolver, err := shows.NewResolver(cfg)
+	if err != nil {
+		return fmt.Errorf("creating show resolver: %w", err)
+	}
+
+	allShows := resolver.ListShows()
+	enabledShows := resolver.ListEnabledShows(true) // sorted by priority
+
+	fmt.Printf("Configured Shows:\n")
+	fmt.Printf("================\n\n")
+
+	if len(allShows) == 0 {
+		fmt.Printf("No shows configured in config file.\n")
+		fmt.Printf("Add show configurations to the [shows] section.\n")
+		return nil
+	}
+
+	for _, showKey := range allShows {
+		showCfg := cfg.Shows[showKey]
+		aliases := resolver.GetShowAliases(showKey)
+		
+		status := "disabled"
+		priority := ""
+		if showCfg.Enabled {
+			status = "enabled"
+			priority = fmt.Sprintf(" (priority: %d)", showCfg.Priority)
+		}
+
+		fmt.Printf("• %s [%s]%s\n", showKey, status, priority)
+		fmt.Printf("  Pattern: %s | %s\n", showCfg.ShowNamePattern, 
+			getSourceDescription(showCfg))
+		
+		if len(aliases) > 0 {
+			fmt.Printf("  Aliases: %s\n", strings.Join(aliases, ", "))
+		}
+		fmt.Printf("\n")
+	}
+
+	if len(enabledShows) > 0 {
+		fmt.Printf("Processing Order (enabled shows by priority):\n")
+		for i, showKey := range enabledShows {
+			fmt.Printf("%d. %s\n", i+1, showKey)
+		}
+	}
+
+	return nil
+}
+
+// listAvailableTemplates displays all configured templates
+func listAvailableTemplates(cfg *config.Config) error {
+	fmt.Printf("Available Templates:\n")
+	fmt.Printf("===================\n\n")
+
+	if len(cfg.Templates.Templates) == 0 {
+		fmt.Printf("No templates configured in config file.\n")
+		fmt.Printf("Add template configurations to the [templates.templates] section.\n")
+		return nil
+	}
+
+	defaultTemplate := cfg.Templates.Default
+	if defaultTemplate == "" {
+		defaultTemplate = "classic"
+	}
+
+	for name, templateCfg := range cfg.Templates.Templates {
+		isDefault := ""
+		if name == defaultTemplate {
+			isDefault = " (default)"
+		}
+
+		fmt.Printf("• %s%s\n", name, isDefault)
+		
+		hasHeader := templateCfg.Header != ""
+		hasFooter := templateCfg.Footer != ""
+		
+		fmt.Printf("  Structure: ")
+		if hasHeader {
+			fmt.Printf("Header + ")
+		}
+		fmt.Printf("Track")
+		if hasFooter {
+			fmt.Printf(" + Footer")
+		}
+		fmt.Printf("\n")
+		
+		fmt.Printf("  Track format: %s\n", 
+			truncateForDisplay(templateCfg.Track, 60))
+		fmt.Printf("\n")
+	}
+
+	fmt.Printf("Default template: %s\n", defaultTemplate)
+	return nil
+}
+
+// getSourceDescription returns a human-readable description of the CUE file source
+func getSourceDescription(showCfg config.ShowConfig) string {
+	if showCfg.CueFileMapping != "" {
+		return fmt.Sprintf("file: %s", showCfg.CueFileMapping)
+	}
+	if showCfg.CueFilePattern != "" {
+		return fmt.Sprintf("pattern: %s", showCfg.CueFilePattern)
+	}
+	return "no source configured"
+}
+
+// truncateForDisplay truncates a string for display purposes
+func truncateForDisplay(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
 }

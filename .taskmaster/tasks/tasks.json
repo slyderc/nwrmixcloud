@@ -842,7 +842,7 @@
               2
             ],
             "details": "Rewrite cmd/mixcloud-updater/main.go to support './mixcloud-updater config.toml' as primary usage. Add -show flag for specific show processing by name/alias. Implement single positional argument support for config file. Remove old -cue-file and -show-name flags. Add better help text explaining the new usage patterns. Maintain -dry-run and other utility flags.",
-            "status": "pending",
+            "status": "in-progress",
             "testStrategy": "Test CLI argument parsing with various combinations: no args, config only, config with show alias, dry-run mode. Verify error handling for missing configs."
           },
           {
@@ -975,7 +975,7 @@
     ],
     "metadata": {
       "created": "2025-06-29T19:16:03.127Z",
-      "updated": "2025-06-30T04:35:10.929Z",
+      "updated": "2025-06-30T04:55:20.640Z",
       "description": "Tasks for master context"
     }
   }

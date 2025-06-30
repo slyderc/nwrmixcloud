@@ -45,6 +45,14 @@ type Config struct {
 		Default   string                    `toml:"default"`
 		Templates map[string]TemplateConfig `toml:"templates"`
 	} `toml:"templates"`
+	
+	Shows map[string]ShowConfig `toml:"shows"`
+	
+	Processing struct {
+		CueFileDirectory string `toml:"cue_file_directory"`
+		AutoProcess      bool   `toml:"auto_process"`
+		BatchSize        int    `toml:"batch_size"`
+	} `toml:"processing"`
 }
 
 // TemplateConfig represents a template configuration for tracklist formatting
@@ -52,6 +60,29 @@ type TemplateConfig struct {
 	Header string `toml:"header"`
 	Track  string `toml:"track"`
 	Footer string `toml:"footer"`
+}
+
+// ShowConfig represents configuration for a specific show
+type ShowConfig struct {
+	// CUE file mapping
+	CueFilePattern string `toml:"cue_file_pattern"` // e.g., "MYR*.cue"
+	CueFileMapping string `toml:"cue_file_mapping"` // e.g., "latest.cue" or specific file
+	
+	// Show identification
+	ShowNamePattern string   `toml:"show_name_pattern"` // e.g., "Sounds Like - {date}"
+	Aliases         []string `toml:"aliases"`           // e.g., ["sounds-like", "sl"]
+	
+	// Template overrides
+	TemplateName   string `toml:"template"`        // Reference to templates section
+	CustomTemplate string `toml:"custom_template"` // Inline template override
+	
+	// Date/time handling
+	DateExtraction string `toml:"date_extraction"` // Regex to extract date from filename
+	DateFormat     string `toml:"date_format"`     // Format for show title generation
+	
+	// Processing options
+	Enabled  bool `toml:"enabled"`
+	Priority int  `toml:"priority"`
 }
 
 // ConfigError represents configuration-related errors
@@ -201,6 +232,16 @@ func DefaultConfig() *Config {
 			Default:   "classic", // Use existing hardcoded format as default
 			Templates: make(map[string]TemplateConfig),
 		},
+		Shows: make(map[string]ShowConfig),
+		Processing: struct {
+			CueFileDirectory string `toml:"cue_file_directory"`
+			AutoProcess      bool   `toml:"auto_process"`
+			BatchSize        int    `toml:"batch_size"`
+		}{
+			CueFileDirectory: ".", // Default to current directory
+			AutoProcess:      false,
+			BatchSize:        5, // Process 5 shows at a time by default
+		},
 	}
 }
 
@@ -263,6 +304,27 @@ func mergeWithDefaults(loaded, defaults *Config) *Config {
 		}
 	}
 
+	// Merge Shows values
+	if len(loaded.Shows) > 0 {
+		if result.Shows == nil {
+			result.Shows = make(map[string]ShowConfig)
+		}
+		for name, show := range loaded.Shows {
+			result.Shows[name] = show
+		}
+	}
+
+	// Merge Processing values
+	if loaded.Processing.CueFileDirectory != "" {
+		result.Processing.CueFileDirectory = loaded.Processing.CueFileDirectory
+	}
+	if loaded.Processing.AutoProcess {
+		result.Processing.AutoProcess = loaded.Processing.AutoProcess
+	}
+	if loaded.Processing.BatchSize > 0 {
+		result.Processing.BatchSize = loaded.Processing.BatchSize
+	}
+
 	return &result
 }
 
@@ -294,6 +356,14 @@ func (c *Config) ApplyEnvironmentOverrides() {
 	// Paths environment overrides
 	if envVal := os.Getenv("NWRMIXCLOUD_PATHS_CUE_FILE_DIRECTORY"); envVal != "" {
 		c.Paths.CueFileDirectory = envVal
+	}
+
+	// Processing environment overrides
+	if envVal := os.Getenv("NWRMIXCLOUD_PROCESSING_CUE_FILE_DIRECTORY"); envVal != "" {
+		c.Processing.CueFileDirectory = envVal
+	}
+	if envVal := os.Getenv("NWRMIXCLOUD_PROCESSING_AUTO_PROCESS"); envVal == "true" {
+		c.Processing.AutoProcess = true
 	}
 
 	// AIDEV-NOTE: Filtering arrays are typically not overridden via env vars due to complexity

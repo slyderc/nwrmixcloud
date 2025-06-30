@@ -522,3 +522,262 @@ func TestBuildTemplateData(t *testing.T) {
 		t.Errorf("Expected track 1 artist 'Artist One', got '%s'", track1.Artist)
 	}
 }
+
+func TestLoadCustomTemplate(t *testing.T) {
+	formatter := NewTemplateFormatter(&config.Config{})
+
+	tests := []struct {
+		name           string
+		templateName   string
+		customTemplate string
+		wantError      bool
+	}{
+		{
+			name:           "simple custom template",
+			templateName:   "custom1",
+			customTemplate: "{{.StartTime}} - {{.Title}} by {{.Artist}}",
+			wantError:      false,
+		},
+		{
+			name:           "custom template with defines",
+			templateName:   "custom2",
+			customTemplate: "{{define \"header\"}}Playlist:{{end}}{{define \"track\"}}{{.Title}}{{end}}",
+			wantError:      false,
+		},
+		{
+			name:           "empty custom template",
+			templateName:   "custom3",
+			customTemplate: "",
+			wantError:      true,
+		},
+		{
+			name:           "invalid custom template",
+			templateName:   "custom4",
+			customTemplate: "{{.InvalidField",
+			wantError:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := formatter.LoadCustomTemplate(tt.templateName, tt.customTemplate)
+			
+			if tt.wantError {
+				if err == nil {
+					t.Error("LoadCustomTemplate() should return error")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("LoadCustomTemplate() error = %v", err)
+				}
+				if !formatter.HasTemplate(tt.templateName) {
+					t.Errorf("Template %s should be loaded", tt.templateName)
+				}
+			}
+		})
+	}
+}
+
+func TestSelectTemplateForShow(t *testing.T) {
+	cfg := &config.Config{
+		Templates: struct {
+			Default   string                    `toml:"default"`
+			Templates map[string]config.TemplateConfig `toml:"templates"`
+		}{
+			Default: "default-template",
+			Templates: map[string]config.TemplateConfig{
+				"default-template": {
+					Track: "{{.Title}} by {{.Artist}}",
+				},
+				"named-template": {
+					Track: "Named: {{.Title}}",
+				},
+			},
+		},
+	}
+
+	formatter := NewTemplateFormatter(cfg)
+	err := formatter.LoadTemplates()
+	if err != nil {
+		t.Fatalf("LoadTemplates() error = %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		showCfg   *config.ShowConfig
+		wantError bool
+		expected  string
+	}{
+		{
+			name:      "nil show config",
+			showCfg:   nil,
+			wantError: true,
+		},
+		{
+			name: "custom inline template",
+			showCfg: &config.ShowConfig{
+				CustomTemplate: "Custom: {{.Title}}",
+			},
+			wantError: false,
+			expected:  "custom_", // Partial match since pointer address varies
+		},
+		{
+			name: "named template reference",
+			showCfg: &config.ShowConfig{
+				TemplateName: "named-template",
+			},
+			wantError: false,
+			expected:  "named-template",
+		},
+		{
+			name: "non-existent named template",
+			showCfg: &config.ShowConfig{
+				TemplateName: "non-existent",
+			},
+			wantError: true,
+		},
+		{
+			name: "default template fallback",
+			showCfg: &config.ShowConfig{
+				// No template specified
+			},
+			wantError: false,
+			expected:  "default-template",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := formatter.SelectTemplateForShow(tt.showCfg)
+			
+			if tt.wantError {
+				if err == nil {
+					t.Error("SelectTemplateForShow() should return error")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("SelectTemplateForShow() error = %v", err)
+				}
+				if tt.expected == "custom_" {
+					// For custom templates, just check the prefix
+					if !strings.HasPrefix(result, tt.expected) {
+						t.Errorf("SelectTemplateForShow() = %v, want prefix %v", result, tt.expected)
+					}
+				} else if result != tt.expected {
+					t.Errorf("SelectTemplateForShow() = %v, want %v", result, tt.expected)
+				}
+			}
+		})
+	}
+}
+
+func TestFormatWithShowConfig(t *testing.T) {
+	cfg := &config.Config{
+		Station: struct {
+			Name             string `toml:"name"`
+			MixcloudUsername string `toml:"mixcloud_username"`
+		}{
+			Name: "Test Station",
+		},
+		Templates: struct {
+			Default   string                    `toml:"default"`
+			Templates map[string]config.TemplateConfig `toml:"templates"`
+		}{
+			Templates: map[string]config.TemplateConfig{
+				"test-template": {
+					Header: "Playlist:\n",
+					Track:  "{{.Index}}. {{.Title}} by {{.Artist}}\n",
+					Footer: "End of playlist",
+				},
+			},
+		},
+	}
+
+	formatter := NewTemplateFormatter(cfg)
+	err := formatter.LoadTemplates()
+	if err != nil {
+		t.Fatalf("LoadTemplates() error = %v", err)
+	}
+
+	tracks := []cue.Track{
+		{StartTime: "00:00", Artist: "Artist One", Title: "Song One"},
+		{StartTime: "03:30", Artist: "Artist Two", Title: "Song Two"},
+	}
+
+	showCfg := &config.ShowConfig{
+		TemplateName: "test-template",
+	}
+
+	metadata := map[string]interface{}{
+		"show_title": "Test Show",
+		"show_date":  "2023-01-01",
+	}
+
+	result, err := formatter.FormatWithShowConfig(tracks, showCfg, metadata)
+	if err != nil {
+		t.Errorf("FormatWithShowConfig() error = %v", err)
+	}
+
+	if !strings.Contains(result, "Playlist:") {
+		t.Error("Result should contain header")
+	}
+	if !strings.Contains(result, "1. Song One by Artist One") {
+		t.Error("Result should contain formatted track 1")
+	}
+	if !strings.Contains(result, "2. Song Two by Artist Two") {
+		t.Error("Result should contain formatted track 2")
+	}
+	if !strings.Contains(result, "End of playlist") {
+		t.Error("Result should contain footer")
+	}
+}
+
+func TestGetTemplateInfo(t *testing.T) {
+	cfg := &config.Config{
+		Templates: struct {
+			Default   string                    `toml:"default"`
+			Templates map[string]config.TemplateConfig `toml:"templates"`
+		}{
+			Templates: map[string]config.TemplateConfig{
+				"complete": {
+					Header: "Header",
+					Track:  "Track",
+					Footer: "Footer",
+				},
+				"track-only": {
+					Track: "Track only",
+				},
+			},
+		},
+	}
+
+	formatter := NewTemplateFormatter(cfg)
+	err := formatter.LoadTemplates()
+	if err != nil {
+		t.Fatalf("LoadTemplates() error = %v", err)
+	}
+
+	// Test complete template
+	info, err := formatter.GetTemplateInfo("complete")
+	if err != nil {
+		t.Errorf("GetTemplateInfo() error = %v", err)
+	}
+	if !info["has_header"] || !info["has_track"] || !info["has_footer"] {
+		t.Errorf("Complete template info incorrect: %v", info)
+	}
+
+	// Test track-only template
+	info, err = formatter.GetTemplateInfo("track-only")
+	if err != nil {
+		t.Errorf("GetTemplateInfo() error = %v", err)
+	}
+	if info["has_header"] || !info["has_track"] || info["has_footer"] {
+		t.Errorf("Track-only template info incorrect: %v", info)
+	}
+
+	// Test non-existent template
+	_, err = formatter.GetTemplateInfo("non-existent")
+	if err == nil {
+		t.Error("GetTemplateInfo() should return error for non-existent template")
+	}
+}

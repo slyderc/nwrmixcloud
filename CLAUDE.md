@@ -4,94 +4,92 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Go application that parses CUE sheet files (used by radio automation software like Myriad) and automatically updates Mixcloud show descriptions with formatted tracklists. The application filters out station IDs, commercials, and other non-music content before generating clean tracklists.
+Go application that parses CUE sheet files (used by radio automation software like Myriad) and automatically updates Mixcloud show descriptions with formatted tracklists. Uses a unified config-driven architecture supporting batch and single-show processing with flexible templating.
 
-## Essential Commands
+## Development Commands
 
-### Development Workflow
 ```bash
-# Build the application
+# Build and test
 go build ./cmd/mixcloud-updater
-
-# Run tests for all packages
 go test ./...
+go test ./internal/config -v     # Test specific package
 
-# Run tests for specific package
-go test ./internal/cue -v
-go test ./internal/filter -v
-go test ./internal/formatter -v
-go test ./internal/mixcloud -v
+# Platform builds
+make build-windows
+make build-macos 
+make build-all
 
-# Build for different platforms
-make build-windows    # Windows executable
-make build-macos      # macOS executable
-make build-all        # Both platforms
-make clean            # Remove build artifacts
-
-# Run the application
-./mixcloud-updater -cue-file MYR04137.cue -show-name "The Newer New Wave Show" -config config.toml
-./mixcloud-updater -cue-file MYR04137.cue -show-name "The Newer New Wave Show" -dry-run
-```
-
-### CLI Usage
-```bash
-# Required flags
--cue-file string     # Path to CUE file to parse
--show-name string    # Show name for Mixcloud URL matching
-
-# Optional flags  
--config string       # Config file path (default: config.toml)
--dry-run            # Preview changes without updating Mixcloud
--help               # Show help information
--version            # Show version information
+# Run application
+./mixcloud-updater config.toml              # Process all enabled shows
+./mixcloud-updater -show "alias" config.toml # Process specific show
+./mixcloud-updater -dry-run config.toml     # Preview without updating
 ```
 
 ## Architecture Overview
 
-The application follows a pipeline architecture with distinct processing stages:
+### Core Pipeline Flow (Per Show)
+1. **Resolve** show configuration → Find show by name/alias with CUE file detection
+2. **Parse** CUE file → Extract track metadata (timing, artist, title)
+3. **Filter** tracks → Remove station IDs, commercials, unwanted content  
+4. **Format** tracklist → Generate Mixcloud-compatible description with templates
+5. **Upload** → Update Mixcloud show description via OAuth API with retry logic
 
-### Core Pipeline Flow
-1. **Parse** CUE file → Extract track metadata (timing, artist, title)
-2. **Filter** tracks → Remove station IDs, commercials, unwanted content  
-3. **Format** tracklist → Generate Mixcloud-compatible description
-4. **Upload** → Update Mixcloud show description via OAuth API
+### Key Features
+- **Config-Driven**: TOML configuration with shows, templates, and processing options
+- **Show Management**: Aliases, CUE file patterns, template selection, priority ordering
+- **Template System**: Go text/template with custom functions and smart truncation
+- **Batch Processing**: Process multiple shows with structured logging and error handling
+- **Retry Logic**: Exponential backoff for transient API failures
 
-### Package Structure
+## Package Structure
 
-**`internal/cue`** - CUE file parsing
-- Handles Myriad-specific CUE format variations
-- Parses track metadata: INDEX, PERFORMER, TITLE commands
-- Converts MM:SS:FF timing to MM:SS format
-- Validates track data and handles malformed files
-
-**`internal/filter`** - Content filtering  
-- String-based and regex-based filtering rules
-- Default patterns for common radio station content
-- Genre-based filtering (e.g., "Sweepers", "Station ID")
-- Configurable exclusion lists for artists and titles
-
-**`internal/formatter`** - Tracklist formatting
-- Generates format: `MM:SS - "Track Title" by Artist Name`
-- Smart truncation at line boundaries (1000 char Mixcloud limit)
-- Quote escaping and missing field handling
-- Estimates final length before formatting
-
-**`internal/mixcloud`** - Mixcloud API integration
-- OAuth 2.0 authentication with automatic token refresh
-- URL parsing and cloudcast key extraction
-- Rate limiting with exponential backoff and jitter
-- Multipart form uploads for description updates
+**`cmd/mixcloud-updater`** - CLI entry point with unified interface
 
 **`internal/config`** - Configuration management
-- TOML-based configuration files
-- OAuth credentials and station settings
-- Filtering rules and excluded content patterns
+- TOML parsing with shows, templates, processing sections
+- Environment variable overrides and validation
+- OAuth credentials handling
 
-### Key Data Structures
+**`internal/shows`** - Show resolution and management  
+- Alias-based lookup with case-insensitive matching
+- CUE file pattern matching and latest file detection
+- Show validation and conflict detection
 
-**Track metadata flow:**
+**`internal/processor`** - Core orchestration engine
+- ShowProcessor coordinates complete workflow
+- Batch and single-show processing modes
+- Structured logging with contextual information
+- Retry logic with exponential backoff
+
+**`internal/template`** - Template engine
+- Go text/template with custom functions (upper, lower, truncate, repeat)
+- Show-specific template selection hierarchy
+- Smart truncation with header/footer preservation
+
+**`internal/cue`** - CUE file parsing
+- Myriad-specific format handling with UTF-8 BOM support
+- INDEX, PERFORMER, TITLE command parsing
+- MM:SS:FF to MM:SS time conversion
+
+**`internal/filter`** - Content filtering
+- Multi-layer filtering: genre, exact match, substring, regex
+- Default patterns for radio station content
+- Configurable exclusion lists
+
+**`internal/formatter`** - Tracklist formatting
+- Classic format: `MM:SS - "Track Title" by Artist Name`
+- Template-based formatting with show configuration
+- Smart truncation at line boundaries (1000 char Mixcloud limit)
+
+**`internal/mixcloud`** - Mixcloud API integration
+- OAuth 2.0 with automatic token refresh
+- Rate limiting with exponential backoff
+- Multipart form uploads for description updates
+
+## Key Data Structures
+
 ```go
-// Raw CUE data
+// Track metadata flow
 cue.Track {
     Index: 1,
     StartTime: "03:45", 
@@ -100,171 +98,103 @@ cue.Track {
     Genre: "Synthpop"
 }
 
-// After filtering and formatting
-"03:45 - \"Song Title\" by Artist Name"
+// Show configuration
+config.ShowConfig {
+    CueFilePattern:  "MYR*.cue",
+    ShowNamePattern: "Show - {date}",
+    Aliases:         []string{"alias1", "alias2"},
+    TemplateName:    "detailed",
+    Enabled:         true,
+    Priority:        1
+}
+
+// Processing result with comprehensive reporting
+processor.ProcessingResult {
+    ShowKey:         string,
+    Success:         bool,
+    Error:           error,
+    ParsedTracks:    int,
+    FilteredTracks:  int,
+    FormattedLength: int,
+    Duration:        time.Duration
+}
 ```
-
-**OAuth flow with automatic refresh:**
-```go
-// Client handles token lifecycle automatically
-client := mixcloud.NewClient(config, "config.toml")
-show, err := client.GetShow("https://mixcloud.com/user/show-name/")
-err = client.UpdateShowDescription(showURL, formattedTracklist)
-```
-
-## Configuration
-
-### config.toml Structure
-```toml
-[station]
-name = "Station Name"
-mixcloud_username = "your-username"
-
-[oauth]
-client_id = "your-client-id"
-client_secret = "your-client-secret"
-access_token = "auto-updated"
-refresh_token = "auto-updated"
-
-[filtering]
-excluded_artists = ["Station ID", "Commercial"]
-excluded_titles = ["Station Identification"]
-excluded_artist_patterns = ["(?i)sweeper", "(?i)promo"]
-excluded_title_patterns = ["(?i)advertisement"]
-
-[paths]
-cue_file_directory = "/path/to/cue/files"
-```
-
-### OAuth Setup
-The application requires Mixcloud OAuth credentials. Tokens are automatically refreshed and persisted back to the config file during API operations.
-
-## CUE File Format
-
-The parser handles Myriad-generated CUE files with this structure:
-```
-PERFORMER "Show Host"
-TITLE "Show Title"
-FILE "audio.wav" WAV
-  TRACK 01 AUDIO
-    TITLE "Song Title"
-    PERFORMER "Artist Name"
-    GENRE "Genre"
-    INDEX 01 MM:SS:FF
-```
-
-Key parsing features:
-- Handles UTF-8 BOM from Windows-generated files
-- Supports both album-level and track-level metadata
-- Converts MM:SS:FF timing to MM:SS format (drops frame info)
-- Processes REM commands for extended metadata
 
 ## Development Patterns
 
 ### Error Handling
-The codebase uses Go's standard error handling with wrapped errors:
+Standard Go error handling with wrapped errors:
 ```go
 if err := parser.processLine(line); err != nil {
     return nil, fmt.Errorf("parsing error in '%s': %w", filename, err)
 }
 ```
 
-### OAuth Integration
-The Mixcloud client automatically handles token refresh:
-```go
-// Token refresh is transparent - just use the client
-client, err := mixcloud.NewClient(cfg, "config.toml")
-show, err := client.GetShow(showURL)  // May trigger token refresh
-```
-
-### Filtering System
-Multi-layer filtering with clear precedence:
+### Filtering System Precedence
 1. Genre-based exclusions (most specific)
 2. Exact string matches
 3. Substring contains matching  
 4. Regex pattern matching
 
-### Testing Strategy
-- Unit tests for each package with table-driven tests
-- Mock-based testing for external dependencies
-- Integration tests with sample CUE files
-- Boundary testing for character limits and edge cases
+### Template Selection Hierarchy
+1. Custom inline template (`custom_template`)
+2. Named template reference (`template_name`) 
+3. Default template from config
+4. Classic fallback
+
+### OAuth Integration
+Automatic token refresh handled transparently:
+```go
+client, err := mixcloud.NewClient(cfg, "config.toml")
+show, err := client.GetShow(showURL)  // May trigger token refresh
+```
+
+### Structured Logging
+Uses slog for production monitoring:
+```go
+sp.logger.Info("Processing show",
+    slog.String("show_key", showKey),
+    slog.Bool("dry_run", dryRun),
+    slog.Int("track_count", trackCount))
+```
 
 ## Common Development Tasks
 
 ### Adding New Filter Rules
-1. Update `internal/config/config.go` struct if needed
+1. Update `internal/config/config.go` struct
 2. Add filter logic in `internal/filter/filter.go`
-3. Update `isExcludedBy*` methods with new rule type
+3. Update `isExcludedBy*` methods
 4. Add test cases in `filter_test.go`
 
 ### Extending CUE Parser
-1. Add new command type to `CueCommand` enum in `internal/cue/parser.go`
+1. Add command type to `internal/cue/parser.go`
 2. Implement parsing logic in `parseLine()` method
 3. Add handler method in `trackParser` struct
 4. Add validation and test cases
 
-### Modifying Output Format
-1. Update `formatTrackLine()` in `internal/formatter/formatter.go`
-2. Adjust `truncateSmartly()` if format affects length calculations
-3. Update tests to match new format expectations
+### Adding Template Functions
+1. Define function in `internal/template/engine.go`
+2. Add to `funcMap` in template creation
+3. Update template tests
+4. Document in template examples
+
+### Modifying Show Processing
+1. Update `ShowProcessor.processingleShow()` in `internal/processor/show_processor.go`
+2. Add structured logging for new steps
+3. Update `ProcessingResult` struct if needed
+4. Add integration tests
+
+## Testing Strategy
+
+- **Unit Tests**: Table-driven tests for each package
+- **Integration Tests**: Sample CUE files and mock dependencies  
+- **Boundary Tests**: Character limits and edge cases
+- **Config Tests**: Cross-platform path handling with `filepath.Join`
 
 ## Dependencies
 
 - `github.com/BurntSushi/toml` - TOML configuration parsing
 - `golang.org/x/oauth2` - OAuth 2.0 authentication
-- `golang.org/x/text` - Unicode normalization for international characters
+- `golang.org/x/text` - Unicode normalization
 
-The application has minimal external dependencies and uses Go's standard library extensively.
-
-## Production Automation Setup
-
-### OAuth Setup
-
-The application handles OAuth automatically:
-
-1. **First run:**
-   ```bash
-   ./mixcloud-updater -cue-file show.cue -show-name "My Weekly Show"
-   # Browser opens automatically for authorization
-   # Tokens are saved to config.toml
-   ```
-
-2. **Subsequent runs:**
-   ```bash
-   # No re-authorization needed - tokens persist
-   ./mixcloud-updater -cue-file show.cue -show-name "My Weekly Show"
-   ```
-
-### Automation Examples
-
-**Cron Job (Run every 2 hours):**
-```bash
-# Add to crontab with: crontab -e
-0 */2 * * * /path/to/mixcloud-updater -cue-file /radio/shows/latest.cue -show-name "Weekly Show"
-```
-
-**Script for Multiple Shows:**
-```bash
-#!/bin/bash
-# Process all CUE files in a directory
-for cue_file in /radio/shows/*.cue; do
-    show_date=$(date +"%m-%d-%Y")
-    ./mixcloud-updater -cue-file "$cue_file" -show-name "Radio Show $show_date"
-done
-```
-
-**Integration with Radio Software:**
-```bash
-# Add this to your radio automation software's post-show hook
-/path/to/mixcloud-updater -cue-file "$SHOW_CUE_FILE" -show-name "$SHOW_NAME"
-```
-
-### Troubleshooting
-
-- **OAuth is automatic** - browser launches when authentication needed
-- **Tokens persist** - once authorized, runs unattended
-- Use `-dry-run` to test without uploading
-- Check logs for CUE parsing or API errors
-- Verify show name matches Mixcloud URL format
-- To force re-auth: delete `access_token` from config.toml
+Minimal external dependencies, uses Go standard library extensively.

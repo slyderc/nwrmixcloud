@@ -153,6 +153,32 @@ func (f *Formatter) FormatTracklistWithTemplate(tracks []cue.Track, trackFilter 
 	return result
 }
 
+// FormatTracklistWithShowConfig formats tracks using template selection based on show configuration
+func (f *Formatter) FormatTracklistWithShowConfig(tracks []cue.Track, trackFilter *filter.Filter, showCfg *config.ShowConfig, metadata map[string]interface{}) string {
+	// Handle edge cases
+	if tracks == nil || len(tracks) == 0 {
+		return ""
+	}
+	
+	// Check if template formatting is available
+	if f.templateFormatter == nil {
+		// Fall back to classic formatting
+		return f.formatClassic(tracks, trackFilter)
+	}
+	
+	// Apply filtering first
+	filteredTracks := f.applyFilter(tracks, trackFilter)
+	
+	// Use show-specific template formatting
+	result, err := f.templateFormatter.FormatWithShowConfig(filteredTracks, showCfg, metadata)
+	if err != nil {
+		// Fall back to classic formatting on error (including when "classic" is requested)
+		return f.formatClassic(tracks, trackFilter)
+	}
+	
+	return result
+}
+
 // applyFilter applies the filter to tracks and returns filtered results
 func (f *Formatter) applyFilter(tracks []cue.Track, trackFilter *filter.Filter) []cue.Track {
 	if trackFilter == nil {
@@ -468,4 +494,28 @@ func (f *Formatter) ValidateTemplate(templateName string) error {
 		return fmt.Errorf("template support not enabled")
 	}
 	return f.templateFormatter.ValidateTemplate(templateName)
+}
+
+// SelectTemplateForShow determines which template to use for a given show configuration
+func (f *Formatter) SelectTemplateForShow(showCfg *config.ShowConfig) (string, error) {
+	if f.templateFormatter == nil {
+		return "classic", nil
+	}
+	return f.templateFormatter.SelectTemplateForShow(showCfg)
+}
+
+// GetTemplateInfo returns information about a loaded template
+func (f *Formatter) GetTemplateInfo(templateName string) (map[string]bool, error) {
+	if f.templateFormatter == nil {
+		return nil, fmt.Errorf("template support not enabled")
+	}
+	return f.templateFormatter.GetTemplateInfo(templateName)
+}
+
+// LoadCustomTemplate loads an inline custom template
+func (f *Formatter) LoadCustomTemplate(name string, customTemplate string) error {
+	if f.templateFormatter == nil {
+		return fmt.Errorf("template support not enabled")
+	}
+	return f.templateFormatter.LoadCustomTemplate(name, customTemplate)
 }

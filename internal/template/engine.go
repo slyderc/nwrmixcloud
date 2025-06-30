@@ -346,3 +346,118 @@ func (tf *TemplateFormatter) GetDefaultTemplateName() string {
 	}
 	return "classic" // fallback to classic formatting
 }
+
+// LoadCustomTemplate loads an inline custom template for a specific show
+func (tf *TemplateFormatter) LoadCustomTemplate(name string, customTemplate string) error {
+	if customTemplate == "" {
+		return fmt.Errorf("custom template cannot be empty")
+	}
+
+	// Create custom function map
+	funcMap := template.FuncMap{
+		"repeat": strings.Repeat,
+		"upper":  strings.ToUpper,
+		"lower":  strings.ToLower,
+		"title":  strings.Title,
+		"truncate": func(s string, n int) string {
+			if len(s) <= n {
+				return s
+			}
+			return s[:n] + "..."
+		},
+		"printf": fmt.Sprintf,
+		"join": func(sep string, items []string) string {
+			return strings.Join(items, sep)
+		},
+		"add": func(a, b int) int {
+			return a + b
+		},
+		"sub": func(a, b int) int {
+			return a - b
+		},
+	}
+
+	// For custom templates, we assume the entire template is a track template
+	// unless it contains explicit {{define}} blocks
+	var templateText string
+	if strings.Contains(customTemplate, "{{define") {
+		// Template already has defined sections
+		templateText = customTemplate
+	} else {
+		// Wrap as a track template
+		templateText = fmt.Sprintf("{{define \"track\"}}%s{{end}}", customTemplate)
+	}
+
+	// Parse the custom template
+	tmpl, err := template.New(name).Funcs(funcMap).Parse(templateText)
+	if err != nil {
+		return fmt.Errorf("parsing custom template: %w", err)
+	}
+
+	tf.templates[name] = tmpl
+	return nil
+}
+
+// SelectTemplateForShow determines which template to use for a given show configuration
+func (tf *TemplateFormatter) SelectTemplateForShow(showCfg *config.ShowConfig) (string, error) {
+	if showCfg == nil {
+		return "", fmt.Errorf("show configuration cannot be nil")
+	}
+
+	// Priority 1: Custom inline template
+	if showCfg.CustomTemplate != "" {
+		customTemplateName := fmt.Sprintf("custom_%p", showCfg) // Unique name based on pointer
+		if err := tf.LoadCustomTemplate(customTemplateName, showCfg.CustomTemplate); err != nil {
+			return "", fmt.Errorf("loading custom template: %w", err)
+		}
+		return customTemplateName, nil
+	}
+
+	// Priority 2: Named template reference
+	if showCfg.TemplateName != "" {
+		if tf.HasTemplate(showCfg.TemplateName) {
+			return showCfg.TemplateName, nil
+		}
+		return "", fmt.Errorf("referenced template %s not found", showCfg.TemplateName)
+	}
+
+	// Priority 3: Default template
+	defaultName := tf.GetDefaultTemplateName()
+	if defaultName != "classic" && tf.HasTemplate(defaultName) {
+		return defaultName, nil
+	}
+
+	// Priority 4: Fall back to classic formatting (handled by caller)
+	return "classic", nil
+}
+
+// FormatWithShowConfig formats tracks using template selection based on show configuration
+func (tf *TemplateFormatter) FormatWithShowConfig(tracks []cue.Track, showCfg *config.ShowConfig, metadata map[string]interface{}) (string, error) {
+	templateName, err := tf.SelectTemplateForShow(showCfg)
+	if err != nil {
+		return "", fmt.Errorf("selecting template: %w", err)
+	}
+
+	// If we got "classic", return empty string to signal fallback needed
+	if templateName == "classic" {
+		return "", fmt.Errorf("classic formatting requested")
+	}
+
+	return tf.FormatWithTemplate(templateName, tracks, nil, metadata)
+}
+
+// GetTemplateInfo returns information about a loaded template
+func (tf *TemplateFormatter) GetTemplateInfo(name string) (map[string]bool, error) {
+	tmpl, exists := tf.templates[name]
+	if !exists {
+		return nil, fmt.Errorf("template %s not found", name)
+	}
+
+	info := map[string]bool{
+		"has_header": tmpl.Lookup("header") != nil,
+		"has_track":  tmpl.Lookup("track") != nil,
+		"has_footer": tmpl.Lookup("footer") != nil,
+	}
+
+	return info, nil
+}
