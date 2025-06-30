@@ -137,15 +137,15 @@ func TestCleanOldFilesWithUnifiedPatterns(t *testing.T) {
 		},
 		{
 			name:    "Mixed pattern files",
-			pattern: "logs/test-YYYYMMDD-session.log",
+			pattern: "logs-test-YYYYMMDD-session.log",
 			createFileNames: []string{
-				"logs/test-20250628-session.log",
-				"logs/test-20250629-session.log",
-				"logs/test-20250630-session.log",
+				"logs-test-20250628-session.log",
+				"logs-test-20250629-session.log",
+				"logs-test-20250630-session.log",
 			},
 			maxFiles:          2,
 			expectedRemaining: 2,
-			description:       "Should handle subdirectory patterns",
+			description:       "Should handle complex filename patterns",
 		},
 	}
 
@@ -333,10 +333,10 @@ func TestRotationWithEdgeCases(t *testing.T) {
 		},
 		{
 			name:        "Complex pattern",
-			pattern:     "complex/path/app-YYYY.MM.DD-HH.log",
+			pattern:     "complex-path-app-YYYY.MM.DD-HH.log",
 			maxFiles:    5,
 			expectError: false,
-			description: "Should handle complex patterns with subdirectories",
+			description: "Should handle complex patterns with safe characters",
 		},
 	}
 

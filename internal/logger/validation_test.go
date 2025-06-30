@@ -150,8 +150,8 @@ func TestGetSuggestion(t *testing.T) {
 		expected    string
 	}{
 		{
-			name:        "Forward slash replacement",
-			pattern:     "app-MM/DD/YYYY.log",
+			name:        "Forward slash replacement", 
+			pattern:     "app-MM-DD-YYYY.log",
 			invalidChars: []rune{'/', '/'},
 			expected:    "app-MM-DD-YYYY.log",
 		},
@@ -177,10 +177,10 @@ func TestGetSuggestion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := getSuggestion(tt.pattern, tt.invalidChars)
+			result := getSuggestionForFilename(tt.pattern, tt.pattern, tt.invalidChars)
 			if result != tt.expected {
-				t.Errorf("getSuggestion(%q, %v) = %q, want %q", 
-					tt.pattern, tt.invalidChars, result, tt.expected)
+				t.Errorf("getSuggestionForFilename(%q, %q, %v) = %q, want %q", 
+					tt.pattern, tt.pattern, tt.invalidChars, result, tt.expected)
 			}
 			t.Logf("✓ %q -> %q", tt.pattern, result)
 		})

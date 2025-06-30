@@ -10,6 +10,8 @@ import (
 	"strings"
 	
 	"github.com/BurntSushi/toml"
+	"github.com/nowwaveradio/mixcloud-updater/internal/constants"
+	"github.com/nowwaveradio/mixcloud-updater/internal/errorutil"
 	"github.com/nowwaveradio/mixcloud-updater/internal/logger"
 )
 
@@ -111,9 +113,12 @@ var (
 // LoadConfig reads and parses a TOML configuration file
 // AIDEV-NOTE: Uses BurntSushi/toml for parsing - handles most TOML format edge cases
 func LoadConfig(filepath string) (*Config, error) {
-	// Check if file exists before attempting to read
-	if _, err := os.Stat(filepath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("%w: %s", ErrFileNotFound, filepath)
+	// Validate file exists and is readable
+	if err := errorutil.ValidateFileReadable(filepath, "loading config"); err != nil {
+		if fileErr, ok := err.(*errorutil.FileOpError); ok && strings.Contains(fileErr.Error(), "not found") {
+			return nil, fmt.Errorf("%w: %s", ErrFileNotFound, filepath)
+		}
+		return nil, err
 	}
 
 	// Read the configuration file
@@ -143,50 +148,25 @@ func LoadConfig(filepath string) (*Config, error) {
 // Validate checks that all required configuration fields are present and valid
 // AIDEV-NOTE: Validation helps catch configuration issues early rather than failing at runtime
 func (c *Config) Validate() error {
-	var errors []string
-
-	// Validate Station fields
-	if strings.TrimSpace(c.Station.Name) == "" {
-		errors = append(errors, "station.name is required")
-	}
-	if strings.TrimSpace(c.Station.MixcloudUsername) == "" {
-		errors = append(errors, "station.mixcloud_username is required")
-	}
-
-	// Validate OAuth fields
-	if strings.TrimSpace(c.OAuth.ClientID) == "" {
-		errors = append(errors, "oauth.client_id is required")
-	}
-	if strings.TrimSpace(c.OAuth.ClientSecret) == "" {
-		errors = append(errors, "oauth.client_secret is required")
-	}
-
-	// Validate Paths fields
-	if strings.TrimSpace(c.Paths.CueFileDirectory) == "" {
-		errors = append(errors, "paths.cue_file_directory is required")
-	} else {
-		// Check if directory exists and is actually a directory
-		if info, err := os.Stat(c.Paths.CueFileDirectory); err != nil {
-			if os.IsNotExist(err) {
-				errors = append(errors, fmt.Sprintf("paths.cue_file_directory does not exist: %s", c.Paths.CueFileDirectory))
-			} else {
-				errors = append(errors, fmt.Sprintf("paths.cue_file_directory cannot be accessed: %s (%v)", c.Paths.CueFileDirectory, err))
-			}
-		} else if !info.IsDir() {
-			errors = append(errors, fmt.Sprintf("paths.cue_file_directory is not a directory: %s", c.Paths.CueFileDirectory))
-		}
-	}
-
-	// AIDEV-NOTE: OAuth AccessToken and RefreshToken are optional during validation
-	// They may be provided via environment variables or obtained through OAuth flow
-
-	if len(errors) > 0 {
-		return ConfigError{
-			Message: fmt.Sprintf("configuration validation failed: %s", strings.Join(errors, "; ")),
-		}
-	}
-
-	return nil
+	return errorutil.ValidateConfig("main", func(vb *errorutil.ValidationBuilder) *errorutil.ValidationBuilder {
+		return vb.
+			// Validate Station fields
+			RequiredString("station.name", c.Station.Name).
+			RequiredString("station.mixcloud_username", c.Station.MixcloudUsername).
+			// Validate OAuth fields
+			RequiredString("oauth.client_id", c.OAuth.ClientID).
+			RequiredString("oauth.client_secret", c.OAuth.ClientSecret).
+			// Validate Paths fields
+			RequiredString("paths.cue_file_directory", c.Paths.CueFileDirectory).
+			// Custom validation for directory existence
+			Custom("paths.cue_file_directory", c.Paths.CueFileDirectory, func(value interface{}) bool {
+				if dirPath, ok := value.(string); ok && !errorutil.IsEmptyString(dirPath) {
+					return errorutil.ValidateDirectory(dirPath, "config validation", false) == nil
+				}
+				return true // Skip validation if empty (handled by RequiredString)
+			}, "directory does not exist or is not accessible")
+			// AIDEV-NOTE: OAuth AccessToken and RefreshToken are optional during validation
+	})
 }
 
 // DefaultConfig returns a Config struct with sensible default values
@@ -242,15 +222,15 @@ func DefaultConfig() *Config {
 		}{
 			CueFileDirectory: ".", // Default to current directory
 			AutoProcess:      false,
-			BatchSize:        5, // Process 5 shows at a time by default
+			BatchSize:        constants.DefaultBatchSize,
 		},
 		Logging: logger.Config{
 			Enabled:         true,
 			Directory:       "logs",
 			FilenamePattern: "mixcloud-updater-%Y%m%d.log",
 			Level:           "info",
-			MaxFiles:        30,
-			MaxSizeMB:       10,
+			MaxFiles:        constants.DefaultMaxLogFiles,
+			MaxSizeMB:       constants.DefaultMaxLogSizeMB,
 			ConsoleOutput:   true,
 		},
 	}
@@ -421,11 +401,6 @@ func SaveConfig(config *Config, filepath string) error {
 		return fmt.Errorf("failed to marshal config to TOML: %w", err)
 	}
 
-	// Write to file with appropriate permissions
-	err = os.WriteFile(filepath, data, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to write config file %s: %w", filepath, err)
-	}
-
-	return nil
+	// Write to file with appropriate permissions and directory creation
+	return errorutil.SafeWriteFile(filepath, data, "saving config", true)
 }

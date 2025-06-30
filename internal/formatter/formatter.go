@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/nowwaveradio/mixcloud-updater/internal/config"
+	"github.com/nowwaveradio/mixcloud-updater/internal/constants"
 	"github.com/nowwaveradio/mixcloud-updater/internal/cue"
 	"github.com/nowwaveradio/mixcloud-updater/internal/filter"
 	"github.com/nowwaveradio/mixcloud-updater/internal/template"
@@ -31,7 +32,7 @@ type Formatter struct {
 
 // FormatOptions provides configuration for formatting behavior
 type FormatOptions struct {
-	MaxLength       int    // Maximum character limit (default: 1000)
+	MaxLength       int    // Maximum character limit (default: constants.MixcloudDescriptionLimit)
 	TruncationText  string // Text to append when truncated (default: "... and more")
 	LineFormat      string // Format template for each line (default: auto)
 	IncludeNumbers  bool   // Whether to include track numbers
@@ -40,7 +41,7 @@ type FormatOptions struct {
 // DefaultFormatOptions returns the default formatting configuration
 func DefaultFormatOptions() FormatOptions {
 	return FormatOptions{
-		MaxLength:      1000,
+		MaxLength:      constants.MixcloudDescriptionLimit,
 		TruncationText: "... and more",
 		LineFormat:     "", // Will use default auto format
 		IncludeNumbers: false,
@@ -50,7 +51,7 @@ func DefaultFormatOptions() FormatOptions {
 // NewFormatter creates a new Formatter instance with default settings
 func NewFormatter() *Formatter {
 	return &Formatter{
-		maxLength: 1000, // Mixcloud's character limit
+		maxLength: constants.MixcloudDescriptionLimit,
 		config:    nil,
 	}
 }
@@ -58,7 +59,7 @@ func NewFormatter() *Formatter {
 // NewFormatterWithConfig creates a new Formatter instance with template support
 func NewFormatterWithConfig(cfg *config.Config) *Formatter {
 	formatter := &Formatter{
-		maxLength: 1000,
+		maxLength: constants.MixcloudDescriptionLimit,
 		config:    cfg,
 	}
 	
@@ -78,7 +79,7 @@ func NewFormatterWithConfig(cfg *config.Config) *Formatter {
 func NewFormatterWithOptions(options FormatOptions) *Formatter {
 	maxLen := options.MaxLength
 	if maxLen <= 0 {
-		maxLen = 1000 // Use default if invalid
+		maxLen = constants.MixcloudDescriptionLimit // Use default if invalid
 	}
 	
 	return &Formatter{

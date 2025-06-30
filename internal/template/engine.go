@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nowwaveradio/mixcloud-updater/internal/config"
+	"github.com/nowwaveradio/mixcloud-updater/internal/constants"
 	"github.com/nowwaveradio/mixcloud-updater/internal/cue"
 	"github.com/nowwaveradio/mixcloud-updater/internal/filter"
 )
@@ -40,25 +41,10 @@ type FormattedTrack struct {
 	Duration  string `json:"duration"`
 }
 
-// NewTemplateFormatter creates a new TemplateFormatter
-func NewTemplateFormatter(cfg *config.Config) *TemplateFormatter {
-	return &TemplateFormatter{
-		templates: make(map[string]*template.Template),
-		config:    cfg,
-	}
-}
-
-// LoadTemplates parses template definitions from config and registers custom functions
-func (tf *TemplateFormatter) LoadTemplates() error {
-	if tf.config == nil {
-		return fmt.Errorf("config is nil")
-	}
-
-	// Clear existing templates
-	tf.templates = make(map[string]*template.Template)
-
-	// Create custom function map
-	funcMap := template.FuncMap{
+// getTemplateFuncMap returns the shared function map for all templates
+// AIDEV-NOTE: Consolidated to eliminate duplication between LoadTemplates and LoadCustomTemplate
+func getTemplateFuncMap() template.FuncMap {
+	return template.FuncMap{
 		"repeat": strings.Repeat,
 		"upper":  strings.ToUpper,
 		"lower":  strings.ToLower,
@@ -80,6 +66,27 @@ func (tf *TemplateFormatter) LoadTemplates() error {
 			return a - b
 		},
 	}
+}
+
+// NewTemplateFormatter creates a new TemplateFormatter
+func NewTemplateFormatter(cfg *config.Config) *TemplateFormatter {
+	return &TemplateFormatter{
+		templates: make(map[string]*template.Template),
+		config:    cfg,
+	}
+}
+
+// LoadTemplates parses template definitions from config and registers custom functions
+func (tf *TemplateFormatter) LoadTemplates() error {
+	if tf.config == nil {
+		return fmt.Errorf("config is nil")
+	}
+
+	// Clear existing templates
+	tf.templates = make(map[string]*template.Template)
+
+	// Get shared function map
+	funcMap := getTemplateFuncMap()
 
 	// Load each template from config
 	for name, templateConfig := range tf.config.Templates.Config {
@@ -156,7 +163,7 @@ func (tf *TemplateFormatter) FormatWithTemplate(templateName string, tracks []cu
 		return "", fmt.Errorf("track template not found")
 	}
 
-	const maxLength = 1000 // Mixcloud's character limit
+	const maxLength = constants.MixcloudDescriptionLimit
 	currentLength := result.Len()
 
 	// Pre-calculate footer size to reserve space
@@ -353,29 +360,8 @@ func (tf *TemplateFormatter) LoadCustomTemplate(name string, customTemplate stri
 		return fmt.Errorf("custom template cannot be empty")
 	}
 
-	// Create custom function map
-	funcMap := template.FuncMap{
-		"repeat": strings.Repeat,
-		"upper":  strings.ToUpper,
-		"lower":  strings.ToLower,
-		"title":  strings.Title,
-		"truncate": func(s string, n int) string {
-			if len(s) <= n {
-				return s
-			}
-			return s[:n] + "..."
-		},
-		"printf": fmt.Sprintf,
-		"join": func(sep string, items []string) string {
-			return strings.Join(items, sep)
-		},
-		"add": func(a, b int) int {
-			return a + b
-		},
-		"sub": func(a, b int) int {
-			return a - b
-		},
-	}
+	// Get shared function map
+	funcMap := getTemplateFuncMap()
 
 	// For custom templates, we assume the entire template is a track template
 	// unless it contains explicit {{define}} blocks

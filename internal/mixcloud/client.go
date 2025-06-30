@@ -27,6 +27,7 @@ import (
 	"golang.org/x/text/unicode/norm"
 
 	"github.com/nowwaveradio/mixcloud-updater/internal/config"
+	"github.com/nowwaveradio/mixcloud-updater/internal/constants"
 	"github.com/nowwaveradio/mixcloud-updater/internal/logger"
 )
 
@@ -62,7 +63,7 @@ const (
 	CloudcastEndpoint      = "/%s"                               // GET /<key>/ (key includes trailing slash)
 	UploadEndpoint         = "/upload/"                          // POST /upload/
 	APITimeoutSeconds      = 30                                  // 30 second timeout for API requests
-	MaxDescriptionLength   = 1000                                // Maximum description length
+	MaxDescriptionLength   = constants.MixcloudDescriptionLimit   // Maximum description length
 	RateLimitMaxRetries    = 5                                   // Maximum retries for rate limiting
 	RateLimitBaseDelay     = 1 * time.Second                    // Base delay for exponential backoff
 )

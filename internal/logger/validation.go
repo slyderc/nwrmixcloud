@@ -4,6 +4,7 @@ package logger
 
 import (
 	"fmt"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -37,15 +38,37 @@ func (e *FilenameValidationError) Error() string {
 }
 
 // ValidateFilenamePattern validates that a filename pattern is safe for the current platform
+// AIDEV-NOTE: Distinguishes between full paths and filename patterns
 func ValidateFilenamePattern(pattern string) error {
 	if pattern == "" {
 		return nil // Empty pattern uses default, which is safe
 	}
 
-	// AIDEV-NOTE: Check for platform-specific invalid characters
-	invalidChars := findInvalidChars(pattern)
+	// Determine if this is a full path or just a filename pattern
+	isFullPath := isAbsolutePath(pattern)
+	
+	var filenameOnly string
+	if isFullPath {
+		// For full paths, extract just the filename part
+		filenameOnly = extractFilename(pattern)
+	} else {
+		// For patterns, the whole thing should be treated as filename
+		// Check if it contains path separators (which would be invalid)
+		if strings.ContainsAny(pattern, "/\\") {
+			return &FilenameValidationError{
+				Pattern:      pattern,
+				InvalidChars: []rune{'/', '\\'},
+				Platform:     "all",
+				Suggestion:   strings.ReplaceAll(strings.ReplaceAll(pattern, "/", "-"), "\\", "-"),
+			}
+		}
+		filenameOnly = pattern
+	}
+	
+	// Validate the filename part for platform-specific invalid characters
+	invalidChars := findInvalidCharsInFilename(filenameOnly)
 	if len(invalidChars) > 0 {
-		suggestion := getSuggestion(pattern, invalidChars)
+		suggestion := getSuggestionForFilename(pattern, filenameOnly, invalidChars)
 		platform := "all"
 		if runtime.GOOS == "windows" {
 			platform = "Windows"
@@ -62,19 +85,37 @@ func ValidateFilenamePattern(pattern string) error {
 	return nil
 }
 
-// findInvalidChars returns invalid characters found in the pattern
-func findInvalidChars(pattern string) []rune {
+// isAbsolutePath determines if a pattern represents a full path vs a filename pattern
+func isAbsolutePath(pattern string) bool {
+	// Unix absolute path
+	if strings.HasPrefix(pattern, "/") {
+		return true
+	}
+	// Windows absolute path (C:\, D:\, etc.)
+	if len(pattern) >= 3 && pattern[1] == ':' && (pattern[2] == '\\' || pattern[2] == '/') {
+		return true
+	}
+	// UNC path (\\server\share)
+	if strings.HasPrefix(pattern, "\\\\") {
+		return true
+	}
+	return false
+}
+
+// findInvalidCharsInFilename returns invalid characters found in the filename part only
+// AIDEV-NOTE: No longer rejects path separators since they're handled at pattern level
+func findInvalidCharsInFilename(filename string) []rune {
 	var invalid []rune
 	
-	// Universal invalid characters (path separators)
-	universalInvalid := []rune{'/', '\\', '\x00'}
+	// Universal invalid characters (only null byte for filenames in full paths)
+	filenameInvalid := []rune{'\x00'}
 	
-	// Windows-specific invalid characters
+	// Windows-specific invalid characters in filenames
 	windowsInvalid := []rune{'<', '>', ':', '"', '|', '?', '*'}
 	
-	// Check universal invalid chars
-	for _, char := range universalInvalid {
-		if strings.ContainsRune(pattern, char) {
+	// Check for null bytes
+	for _, char := range filenameInvalid {
+		if strings.ContainsRune(filename, char) {
 			invalid = append(invalid, char)
 		}
 	}
@@ -82,7 +123,7 @@ func findInvalidChars(pattern string) []rune {
 	// Check Windows-specific chars if on Windows
 	if runtime.GOOS == "windows" {
 		for _, char := range windowsInvalid {
-			if strings.ContainsRune(pattern, char) {
+			if strings.ContainsRune(filename, char) {
 				invalid = append(invalid, char)
 			}
 		}
@@ -91,9 +132,11 @@ func findInvalidChars(pattern string) []rune {
 	return invalid
 }
 
-// getSuggestion provides a safe alternative pattern
-func getSuggestion(pattern string, invalidChars []rune) string {
-	suggestion := pattern
+// getSuggestionForFilename provides a safe alternative pattern
+// AIDEV-NOTE: Now preserves directory path and only fixes filename
+func getSuggestionForFilename(fullPattern, filename string, invalidChars []rune) string {
+	// Start with the original filename
+	suggestion := filename
 	
 	// AIDEV-NOTE: Replace common problematic patterns with safe alternatives
 	replacements := map[rune]string{
@@ -119,7 +162,43 @@ func getSuggestion(pattern string, invalidChars []rune) string {
 		suggestion = strings.ReplaceAll(suggestion, "--", "-")
 	}
 	
-	return suggestion
+	// Combine fixed filename with original directory path
+	dir := extractDirectory(fullPattern)
+	if dir == "" {
+		return suggestion // No directory part
+	}
+	return dir + string(filepath.Separator) + suggestion
+}
+
+// extractFilename extracts the filename from a pattern, handling both Unix and Windows paths
+func extractFilename(pattern string) string {
+	// Handle Windows paths by checking for backslashes
+	if strings.Contains(pattern, "\\") {
+		// Windows path - split on backslash
+		parts := strings.Split(pattern, "\\")
+		return parts[len(parts)-1]
+	}
+	// Unix path or simple filename - use standard filepath.Base
+	return filepath.Base(pattern)
+}
+
+// extractDirectory extracts the directory from a pattern, handling both Unix and Windows paths  
+func extractDirectory(pattern string) string {
+	// Handle Windows paths by checking for backslashes
+	if strings.Contains(pattern, "\\") {
+		// Windows path - split on backslash
+		parts := strings.Split(pattern, "\\")
+		if len(parts) <= 1 {
+			return ""
+		}
+		return strings.Join(parts[:len(parts)-1], "\\")
+	}
+	// Unix path - use standard filepath.Dir
+	dir := filepath.Dir(pattern)
+	if dir == "." {
+		return ""
+	}
+	return dir
 }
 
 // GetSafeFilenamePatterns returns a list of recommended safe patterns
